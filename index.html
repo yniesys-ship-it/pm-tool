@@ -322,6 +322,7 @@ let editingActive = false, pendingRender = false, blurTimer = null;
 let channel = null;
 let currentUser = null;
 let backupHandle = null;
+let verBumped = false;   // 1編集セッションにつき版を1回だけ自動更新
 
 /* ---------- ユーティリティ ---------- */
 const $ = s => document.querySelector(s);
@@ -412,7 +413,7 @@ $("#delProj").onclick=async()=>{
   const id=store.current; delete store.projects[id]; store.current=Object.keys(store.projects)[0];
   await guard(db.from("projects").delete().eq("id",id),"案件の削除"); renderAll(); toast("削除しました");
 };
-$("#projSelect").onchange=e=>{ store.current=e.target.value; saveLastProject(); renderAll(); };
+$("#projSelect").onchange=e=>{ store.current=e.target.value; verBumped=false; saveLastProject(); renderAll(); };
 
 /* ===================== タブ ===================== */
 document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
@@ -424,12 +425,19 @@ document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
 
 /* ===================== SOW ===================== */
 function renderSow(){ const s=cur().sow||{}; SOW_FIELDS.forEach(f=>{ const e=$("#sow_"+f); if(e)e.value=s[f]||""; }); }
+/* SOW編集時に版を自動更新（vX.Y の Y を+1。形式不明なら v1.1 を付与） */
+function bumpVersion(){
+  const v=(cur().sow.ver||"").trim(); const m=v.match(/^(v?)(\d+)\.(\d+)$/i);
+  cur().sow.ver = m ? (m[1]+m[2]+"."+(parseInt(m[3],10)+1)) : (v?(v+"+1"):"v1.1");
+  const e=$("#sow_ver"); if(e) e.value=cur().sow.ver;
+}
 let sowTimer=null;
 SOW_FIELDS.forEach(f=>{
   document.addEventListener("input",e=>{
     if(e.target && e.target.id==="sow_"+f){
       cur().sow[f]=e.target.value;
       if(f==="name"){ cur().name=e.target.value; renderProjSelect(); }
+      if(f!=="ver" && !verBumped){ verBumped=true; bumpVersion(); }  // 編集セッション初回に版を自動更新
       clearTimeout(sowTimer); sowTimer=setTimeout(()=>{
         guard(db.from("projects").update({sow:cur().sow,name:cur().name,updated_at:nowIso()}).eq("id",store.current),"SOWの保存");
         backupSowToFile();   // PCファイルにも保存（保存先設定時のみ）
