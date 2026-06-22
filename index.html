@@ -245,7 +245,7 @@
       </div>
       <div class="tablewrap"><table class="wbs">
         <thead><tr>
-          <th style="width:42px">#</th><th style="min-width:240px">タスク名</th><th style="width:110px">担当者</th>
+          <th style="width:42px">#</th><th style="min-width:300px">タスク名</th><th style="width:110px">担当者</th>
           <th style="width:140px">開始日</th><th style="width:140px">終了日</th><th style="width:56px">日数</th>
           <th style="width:150px">進捗</th><th style="width:120px">ステータス</th><th style="width:80px">先行</th><th style="width:210px">タスク（作業ガイド）</th><th style="width:220px">成果物 / 納品物</th><th style="width:44px"></th>
         </tr></thead>
@@ -463,7 +463,7 @@ function renderWbs(){
     const tdNum=el("td","num"); tdNum.textContent=wbsNumber(tasks,i); tr.appendChild(tdNum);
     const tdTask=el("td","task"); const wrap=el("div","indent-wrap");
     const drag=el("span","rowdrag"); drag.textContent="⋮⋮";
-    const inName=el("input"); inName.value=t.title||""; inName.placeholder="タスク名"; inName.oninput=()=>{t.title=inName.value; persistTask(t);};
+    const inName=el("textarea"); inName.value=t.title||""; inName.placeholder="タスク名"; inName.rows=2; inName.title=t.title||""; inName.style.cssText="width:100%;border:none;background:transparent;resize:vertical;font-family:inherit;font-size:13px;line-height:1.45;min-height:34px;padding:6px 8px;color:var(--ink)"; inName.oninput=()=>{t.title=inName.value; inName.title=inName.value; persistTask(t);};
     wrap.appendChild(drag); wrap.appendChild(inName); tdTask.appendChild(wrap); tr.appendChild(tdTask);
     tr.appendChild(cellInput(t,"assignee","担当"));
     tr.appendChild(cellDate(t,"start")); tr.appendChild(cellDate(t,"end"));
