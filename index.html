@@ -240,7 +240,6 @@
     <div class="card"><h2>WBS <span class="hint">開始/終了日と進捗を入力するとガントに反映。編集は自動でクラウド同期されます</span></h2><div class="body">
       <div class="toolbar no-print" style="margin-bottom:12px">
         <button class="btn primary" id="addTask">＋ タスク追加</button>
-        <button class="btn" id="addSample">サンプル投入</button>
         <span style="color:var(--muted);font-size:12px">レベル：⇤/⇥ ｜ 並べ替え：⇧/⇩</span>
       </div>
       <div class="tablewrap"><table class="wbs">
@@ -507,7 +506,7 @@ function cellDate(t,key){ const td=el("td"); const i=el("input"); i.type="date";
 function renderDelivLinks(box,text){
   box.innerHTML="";
   (text||"").split(/\r?\n/).map(s=>s.trim()).filter(Boolean).forEach(line=>{
-    let label=line, target=line; const bar=line.indexOf("|");
+    let label=line, target=line; const bar=line.search(/[|｜]/);
     if(bar>-1){ label=line.slice(0,bar).trim(); target=line.slice(bar+1).trim(); }
     const a=el("a"); const base="display:block;font-size:11px;margin-top:2px;text-decoration:none;line-height:1.4;";
     if(/^https?:\/\//i.test(target)){ // 外部リンク（Googleドキュメント/スプレッドシート/フォーム等）
@@ -543,16 +542,6 @@ async function addTask(){ const t={id:uuidv4(),title:"",level:1,assignee:"",star
 async function deleteTask(i){ const t=cur().tasks[i]; cur().tasks.splice(i,1); renderWbs(); await guard(db.from("tasks").delete().eq("id",t.id),"タスクの削除"); }
 async function moveTask(i,dir){ const a=cur().tasks; const j=i+dir; if(j<0||j>=a.length)return; [a[i],a[j]]=[a[j],a[i]]; a[i]._ord=i; a[j]._ord=j; renderWbs(); await guard(db.from("tasks").upsert([taskToRow(a[i],store.current,i),taskToRow(a[j],store.current,j)]),"並べ替えの保存"); }
 $("#addTask").onclick=addTask;
-$("#addSample").onclick=async()=>{
-  if(cur().tasks.length && !confirm("現在のタスクに追加します。よろしいですか？"))return;
-  const base=new Date(); const d=n=>fmt(addDays(base,n));
-  const S=[["要件定義",1,"PM",0,4,100,"done",""],["ヒアリング",2,"PM",0,2,100,"done",""],["要件定義書作成",2,"PM",2,4,100,"done",""],
-    ["デザイン",1,"Designer",5,14,40,"inprogress","1"],["ワイヤーフレーム",2,"Designer",5,8,80,"inprogress","1"],["デザインカンプ",2,"Designer",9,14,10,"inprogress","2.1"],
-    ["実装",1,"Engineer",15,28,0,"notstarted","2"],["中間レビュー",1,"PM",18,18,0,"notstarted",""],["公開",1,"Engineer",29,29,0,"notstarted","3"]];
-  const rows=[]; const start=cur().tasks.length;
-  S.forEach(([title,level,who,s,e,p,st,dep],k)=>{ const t={id:uuidv4(),title,level,assignee:who,start:d(s),end:d(e),progress:p,status:st,dep,_ord:start+k}; cur().tasks.push(t); rows.push(taskToRow(t,store.current,start+k)); });
-  renderWbs(); await guard(db.from("tasks").insert(rows),"サンプル投入"); toast("サンプルを投入しました");
-};
 
 /* ===================== KPI ===================== */
 function renderKpis(){
