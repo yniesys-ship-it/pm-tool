@@ -134,6 +134,13 @@
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1f2733;color:#fff;padding:10px 18px;border-radius:10px;box-shadow:var(--shadow);opacity:0;transition:opacity .2s,transform .2s;z-index:100;pointer-events:none}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px)}
   .toast.err{background:#b42318}
+  #briefing{position:fixed;inset:0;z-index:300;background:rgba(20,30,50,.55);display:none;align-items:center;justify-content:center;padding:20px}
+  .brf-card{background:#fff;border-radius:16px;box-shadow:var(--shadow);max-width:560px;width:100%;max-height:82vh;overflow:auto;padding:26px 28px}
+  .brf-step{font-size:12px;color:var(--muted);margin-bottom:6px}
+  .brf-card h2{margin:0 0 14px;font-size:18px;border:none;padding:0;background:none;color:var(--ink)}
+  .brf-body{font-size:14px;line-height:1.7;color:var(--ink)}
+  .brf-body ul{padding-left:20px;margin:8px 0}.brf-body li{margin:5px 0}
+  .brf-card button{margin-top:20px;width:100%;height:44px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;font-size:15px;cursor:pointer}
 
   @media print{
     header,.tabs,.toolbar,.gantt-controls,.no-print{display:none!important}
@@ -173,10 +180,7 @@
     <div class="spacer"></div>
     <div class="userbox"><span class="syncdot" id="syncDot" title="同期状態"></span><span id="syncMsg">接続中…</span><span id="userEmail"></span></div>
     <button class="btn" id="refreshBtn" title="最新を取得">🔄 更新</button>
-    <button class="btn" id="exportBtn">⬇ エクスポート</button>
-    <button class="btn" id="importBtn">⬆ インポート</button>
-    <input type="file" id="importFile" accept="application/json" hidden>
-    <button class="btn" id="printBtn">🖨 印刷/PDF</button>
+    <button class="btn" id="backupBtn" title="SOWの保存先PCファイルを選択。以後SOW更新時に自動保存（Chrome/Edge）">💾 PC保存先</button>
     <button class="btn" id="logoutBtn">ログアウト</button>
   </div>
   <div class="tabs">
@@ -266,6 +270,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div id="briefing"><div class="brf-card"><div class="brf-step" id="brfStep"></div><h2 id="brfTitle"></h2><div class="brf-body" id="brfBody"></div><button id="brfBtn">了解 → 次へ</button></div></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -315,6 +320,8 @@ let store = { projects:{}, current:null };
 let dayPx = 14;
 let editingActive = false, pendingRender = false, blurTimer = null;
 let channel = null;
+let currentUser = null;
+let backupHandle = null;
 
 /* ---------- ユーティリティ ---------- */
 const $ = s => document.querySelector(s);
@@ -362,6 +369,7 @@ async function showApp(session){
   $("#loginOverlay").style.display="none";
   $("#app").style.display="block";
   $("#userEmail").textContent=session.user.email;
+  currentUser=session.user;
   if(appReady) return;        // 既に初期化済みなら再ロードしない
   appReady=true;
   setSync("busy","読み込み中…");
@@ -369,6 +377,7 @@ async function showApp(session){
   subscribeRealtime();
   renderAll();
   setSync("on","同期済み");
+  runBriefing();              // ログイン時ブリーフィング（SOW変更点→今日のタスク→お知らせ）
 }
 
 /* ===================== データ読込 ===================== */
@@ -379,8 +388,14 @@ async function loadAll(){
   (pr.data||[]).forEach(p=>{ store.projects[p.id]={id:p.id,name:p.name||"(無題)",sow:p.sow||{},tasks:[]}; });
   (tr.data||[]).forEach(r=>{ const p=store.projects[r.project_id]; if(p)p.tasks.push(dbToTask(r)); });
   const ids=Object.keys(store.projects);
-  if(ids.length){ store.current=ids[0]; }
+  if(ids.length){ store.current=pickInitialProject(ids); }
   else { await createProject("新規プロジェクト"); }
+}
+function pickInitialProject(ids){
+  try{ const last=localStorage.getItem(lpKey()); if(last && store.projects[last]) return last; }catch(e){}
+  let best=ids[0],bestN=-1;
+  ids.forEach(id=>{ const n=store.projects[id].tasks.length; if(n>bestN){bestN=n;best=id;} }); // 空の新規プロジェクトに戻らない
+  return best;
 }
 
 /* ===================== 案件操作 ===================== */
@@ -397,7 +412,7 @@ $("#delProj").onclick=async()=>{
   const id=store.current; delete store.projects[id]; store.current=Object.keys(store.projects)[0];
   await guard(db.from("projects").delete().eq("id",id),"案件の削除"); renderAll(); toast("削除しました");
 };
-$("#projSelect").onchange=e=>{ store.current=e.target.value; renderAll(); };
+$("#projSelect").onchange=e=>{ store.current=e.target.value; saveLastProject(); renderAll(); };
 
 /* ===================== タブ ===================== */
 document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
@@ -417,6 +432,7 @@ SOW_FIELDS.forEach(f=>{
       if(f==="name"){ cur().name=e.target.value; renderProjSelect(); }
       clearTimeout(sowTimer); sowTimer=setTimeout(()=>{
         guard(db.from("projects").update({sow:cur().sow,name:cur().name,updated_at:nowIso()}).eq("id",store.current),"SOWの保存");
+        backupSowToFile();   // PCファイルにも保存（保存先設定時のみ）
       },600);
     }
   });
@@ -625,19 +641,58 @@ document.addEventListener("focusout",e=>{ if(isField(e.target)){ clearTimeout(bl
 /* ===================== 入出力・印刷・更新 ===================== */
 function renderProjSelect(){ const sel=$("#projSelect"); const keep=store.current; sel.innerHTML=""; for(const id in store.projects){ const o=el("option"); o.value=id; o.textContent=store.projects[id].name||"(無題)"; sel.appendChild(o);} sel.value=keep; }
 $("#refreshBtn").onclick=async()=>{ await loadAll(); renderAll(); toast("最新を取得しました"); };
-$("#exportBtn").onclick=()=>{ const data=JSON.stringify(cur(),null,2); const blob=new Blob([data],{type:"application/json"}); const a=el("a"); a.href=URL.createObjectURL(blob); a.download=(cur().name||"project").replace(/[^\w぀-ヿ一-鿿ー]/g,"_")+".json"; a.click(); URL.revokeObjectURL(a.href); };
-$("#importBtn").onclick=()=>$("#importFile").click();
-$("#importFile").onchange=e=>{ const f=e.target.files[0]; if(!f)return; const r=new FileReader();
-  r.onload=async()=>{ try{ const obj=JSON.parse(r.result); await importProject(obj); toast("インポートしました"); }catch(err){ toast("読み込み失敗: "+err.message,true);} }; r.readAsText(f); e.target.value=""; };
-async function importProject(obj){
-  const id=uuidv4(), name=obj.name||"インポート案件", sow=obj.sow||{};
-  store.projects[id]={id,name,sow,tasks:[]}; store.current=id;
-  await guard(db.from("projects").insert({id,name,sow}),"案件インポート");
-  const rows=(obj.tasks||[]).map((t,i)=>({id:uuidv4(),project_id:id,title:t.title||"",level:t.level||1,assignee:t.assignee||"",start_date:t.start||null,end_date:t.end||null,progress:t.progress||0,status:t.status||"notstarted",dep:t.dep||"",sort_order:i,updated_at:nowIso()}));
-  if(rows.length){ await guard(db.from("tasks").insert(rows),"タスクインポート"); rows.forEach(r=>store.projects[id].tasks.push(dbToTask(r))); }
-  renderAll();
+/* ---- 案件選択の記憶（毎回 新規プロジェクトに戻らない） ---- */
+function lpKey(){ return "pm_lastproj_"+(currentUser?currentUser.id:"x"); }
+function saveLastProject(){ try{ localStorage.setItem(lpKey(), store.current); }catch(e){} }
+
+/* ---- SOWのPCファイル保存（File System Access API：Chrome/Edge） ---- */
+$("#backupBtn").onclick=async()=>{
+  if(!window.showSaveFilePicker){ toast("このブラウザはPC保存に未対応です（Chrome/Edge推奨）",true); return; }
+  try{
+    backupHandle=await window.showSaveFilePicker({suggestedName:(cur().name||"project")+"_SOW.json",types:[{description:"JSON",accept:{"application/json":[".json"]}}]});
+    await backupSowToFile(); toast("PC保存先を設定しました。以後SOW更新時に自動保存します");
+  }catch(e){ /* キャンセルは無視 */ }
+};
+async function backupSowToFile(){
+  if(!backupHandle) return;
+  try{ const w=await backupHandle.createWritable(); await w.write(JSON.stringify({project:cur().name,savedAt:nowIso(),sow:cur().sow},null,2)); await w.close(); }
+  catch(e){ toast("PC保存に失敗: "+(e.message||e),true); }
 }
-$("#printBtn").onclick=()=>{ $("#printTitle").textContent=cur().name||""; window.print(); };
+
+/* ===================== ログイン時ブリーフィング ===================== */
+function ackKey(){ return "pm_acksow_"+(currentUser?currentUser.id:"x")+"_"+store.current; }
+function todayMid(){ const d=new Date(); d.setHours(0,0,0,0); return d; }
+const SOW_LABELS={name:"プロジェクト名",client:"クライアント",vendor:"受注者",date:"作成日",pm:"PM",ver:"バージョン",bg:"背景",goal:"目的・ゴール",in:"対象範囲",out:"対象外",deliv:"成果物",assume:"前提条件",team:"体制",start:"開始予定日",end:"完了予定日",cost:"契約金額",pay:"支払条件",ms:"マイルストーン",note:"備考"};
+function sowDiff(){
+  let prev={}; try{ prev=JSON.parse(localStorage.getItem(ackKey())||"{}"); }catch(e){}
+  const cu=cur().sow||{},diffs=[];
+  SOW_FIELDS.forEach(f=>{ if((prev[f]||"")!==(cu[f]||"")) diffs.push({label:SOW_LABELS[f]||f,from:prev[f]||"",to:cu[f]||""}); });
+  return diffs;
+}
+function todaysTasks(){ const t0=todayMid(); return cur().tasks.filter(t=>{ const s=parseDate(t.start),e=parseDate(t.end); return s&&e&&s<=t0&&t0<=e&&(t.progress||0)<100&&(t.level||1)>=2; }); }
+function attentionTasks(){ const t0=todayMid(),in7=addDays(t0,7);
+  const late=cur().tasks.filter(t=>{const e=parseDate(t.end);return e&&e<t0&&(t.progress||0)<100&&(t.level||1)>=2;});
+  const soon=cur().tasks.filter(t=>{const s=parseDate(t.start);return s&&s>t0&&s<=in7&&(t.level||1)>=2;});
+  return {late,soon}; }
+function runBriefing(){
+  if(!store.current) return;
+  const steps=[]; const diffs=sowDiff(); const firstAck=(localStorage.getItem(ackKey())===null);
+  if(diffs.length && !firstAck){
+    steps.push({title:"📄 SOW（作業範囲）に変更があります", html:
+      "<p>前回の確認以降にSOWが更新されました。変更点を確認してください。</p><ul>"+
+      diffs.map(d=>`<li><b>${esc(d.label)}</b>：<br><span style="color:#b42318">${esc(d.from)||"（空）"}</span><br>→ <span style="color:#16a34a">${esc(d.to)||"（空）"}</span></li>`).join("")+"</ul>"});
+  }
+  const tt=todaysTasks();
+  steps.push({title:"🗓 今日やるべきタスク", html: tt.length? "<ul>"+tt.map(t=>`<li>${esc(t.title)} <span style="color:#6b7686">（〜${esc(t.end)}${t.assignee?"・"+esc(t.assignee):""}）</span></li>`).join("")+"</ul>" : "<p>本日が対象期間のタスクはありません。</p>"});
+  const at=attentionTasks();
+  steps.push({title:"🔔 タスクのお知らせ", html:
+    `<p><b>遅延（期限超過・未完了）：${at.late.length}件</b></p>`+(at.late.length?"<ul>"+at.late.map(t=>`<li style="color:#b42318">${esc(t.title)}（〜${esc(t.end)}）</li>`).join("")+"</ul>":"")+
+    `<p style="margin-top:10px"><b>まもなく開始（7日以内）：${at.soon.length}件</b></p>`+(at.soon.length?"<ul>"+at.soon.map(t=>`<li>${esc(t.title)}（${esc(t.start)}〜）</li>`).join("")+"</ul>":"")});
+  let i=0; const ov=$("#briefing");
+  function render(){ const s=steps[i]; $("#brfStep").textContent=(i+1)+" / "+steps.length; $("#brfTitle").textContent=s.title; $("#brfBody").innerHTML=s.html; $("#brfBtn").textContent=(i<steps.length-1)?"了解 → 次へ":"了解して作業を開始"; }
+  $("#brfBtn").onclick=()=>{ i++; if(i>=steps.length){ ov.style.display="none"; try{ localStorage.setItem(ackKey(),JSON.stringify(cur().sow||{})); }catch(e){} } else render(); };
+  render(); ov.style.display="flex";
+}
 
 /* ===================== 初期描画 ===================== */
 function renderAll(){ if(!store.current)return; renderProjSelect(); renderSow(); renderWbs(); renderGantt(); }
