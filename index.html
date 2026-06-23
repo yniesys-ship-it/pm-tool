@@ -240,6 +240,14 @@
     <div class="card"><h2>WBS <span class="hint">開始/終了日と進捗を入力するとガントに反映。編集は自動でクラウド同期されます</span></h2><div class="body">
       <div class="toolbar no-print" style="margin-bottom:12px">
         <button class="btn primary" id="addTask">＋ タスク追加</button>
+        <label style="font-size:12px;color:var(--muted)">担当者：
+          <select id="wbsFilterAssignee"><option value="">全員</option></select></label>
+        <label style="font-size:12px;color:var(--muted)">並び順：
+          <select id="wbsSortOrder">
+            <option value="wbs">WBS順</option>
+            <option value="start">開始日が早い順</option>
+            <option value="end">終了日が早い順</option>
+          </select></label>
         <span style="color:var(--muted);font-size:12px">レベル：⇤/⇥ ｜ 並べ替え：⇧/⇩</span>
       </div>
       <div class="tablewrap"><table class="wbs">
@@ -330,6 +338,8 @@ let channel = null;
 let currentUser = null;
 let backupHandle = null;
 let verBumped = false;   // 1編集セッションにつき版を1回だけ自動更新
+let wbsFilterAssignee = "";  // 表示専用：担当者フィルタ（""=全員）。DB/sort_orderには影響しない
+let wbsSortOrder = "wbs";    // 表示専用：並び順（wbs=既定/start/end）
 
 /* ---------- ユーティリティ ---------- */
 const $ = s => document.querySelector(s);
@@ -456,8 +466,23 @@ SOW_FIELDS.forEach(f=>{
 /* ===================== WBS ===================== */
 function renderWbs(){
   const tb=$("#wbsBody"); tb.innerHTML=""; const tasks=cur().tasks;
-  tasks.forEach((t,i)=>{
-    const isSummary=(i+1<tasks.length)&&tasks[i+1].level>t.level;
+  refreshWbsFilterOptions(tasks);
+  /* 表示専用の絞り込み/並べ替え。元配列(tasks)・_ord(sort_order)・DBは一切変更しない。
+     既定（全員／WBS順）では元配列そのままを順番通り描画＝従来と完全一致。 */
+  let displayed = tasks.map((t,i)=>({t,i}));
+  if(wbsFilterAssignee){ displayed = displayed.filter(o=>(o.t.assignee||"")===wbsFilterAssignee); }
+  if(wbsSortOrder==="start" || wbsSortOrder==="end"){
+    const key = wbsSortOrder==="start" ? "start" : "end";
+    // 日付ソート時は階層をフラット化し日付順。日付なしは末尾、同日は元順を維持（安定）
+    displayed = displayed.slice().sort((x,y)=>{
+      const dx=parseDate(x.t[key]), dy=parseDate(y.t[key]);
+      if(dx&&dy){ const d=dx-dy; return d!==0?d:(x.i-y.i); }
+      if(dx&&!dy) return -1; if(!dx&&dy) return 1; return x.i-y.i;
+    });
+  }
+  const flat = (wbsSortOrder!=="wbs");  // 日付ソート時はサマリ強調を無効化（フラット表示）
+  displayed.forEach(({t,i})=>{
+    const isSummary=!flat&&(i+1<tasks.length)&&tasks[i+1].level>t.level;
     const tr=el("tr","lvl"+(t.level||1)+(isSummary?" summary":"")); tr.dataset.idx=i;
     const tdNum=el("td","num"); tdNum.textContent=wbsNumber(tasks,i); tr.appendChild(tdNum);
     const tdTask=el("td","task"); const wrap=el("div","indent-wrap");
@@ -498,6 +523,16 @@ function renderWbs(){
     tr.appendChild(tdOp); tb.appendChild(tr);
   });
   renderKpis();
+}
+/* 担当者フィルタの選択肢を現在のタスクから動的生成（重複なし）。表示専用、DB非変更。 */
+function refreshWbsFilterOptions(tasks){
+  const sel=$("#wbsFilterAssignee"); if(!sel)return;
+  const names=[...new Set((tasks||[]).map(t=>(t.assignee||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));
+  if(wbsFilterAssignee && !names.includes(wbsFilterAssignee)) wbsFilterAssignee="";  // 該当者が消えたら全員に戻す
+  sel.innerHTML="";
+  const all=el("option"); all.value=""; all.textContent="全員"; sel.appendChild(all);
+  names.forEach(n=>{ const o=el("option"); o.value=n; o.textContent=n; sel.appendChild(o); });
+  sel.value=wbsFilterAssignee;
 }
 function mkBtn(label,fn){ const b=el("button","lvlbtn"); b.textContent=label; b.onclick=fn; return b; }
 function cellInput(t,key,ph){ const td=el("td"); const i=el("input"); i.value=t[key]||""; i.placeholder=ph||""; i.oninput=()=>{t[key]=i.value;persistTask(t);}; td.appendChild(i); return td; }
@@ -542,6 +577,9 @@ async function addTask(){ const t={id:uuidv4(),title:"",level:1,assignee:"",star
 async function deleteTask(i){ const t=cur().tasks[i]; cur().tasks.splice(i,1); renderWbs(); await guard(db.from("tasks").delete().eq("id",t.id),"タスクの削除"); }
 async function moveTask(i,dir){ const a=cur().tasks; const j=i+dir; if(j<0||j>=a.length)return; [a[i],a[j]]=[a[j],a[i]]; a[i]._ord=i; a[j]._ord=j; renderWbs(); await guard(db.from("tasks").upsert([taskToRow(a[i],store.current,i),taskToRow(a[j],store.current,j)]),"並べ替えの保存"); }
 $("#addTask").onclick=addTask;
+/* 表示専用コントロール：状態を変えてWBSのみ再描画（DB/同期/ガント等には触れない） */
+$("#wbsFilterAssignee").onchange=e=>{ wbsFilterAssignee=e.target.value; renderWbs(); };
+$("#wbsSortOrder").onchange=e=>{ wbsSortOrder=e.target.value; renderWbs(); };
 
 /* ===================== KPI ===================== */
 function renderKpis(){
