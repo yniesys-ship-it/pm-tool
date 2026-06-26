@@ -93,7 +93,11 @@
   tr.lvl2 td.task .indent-wrap{padding-left:18px}
   tr.lvl3 td.task .indent-wrap{padding-left:36px}
   tr.summary{background:#fafbfd;font-weight:600}
-  /* 完了タスク行(level2,progress>=100)の背景を控えめに濃く。装飾のみ・既存スタイルは維持 */
+  /* ステータス別の行背景色（level2タスク行・装飾のみ）。優先順位＝完了 > 進行中 > 保留 > 未着手(色なし)。
+     入力欄/selectは background:transparent のため透過は維持される。summary行・既存スタイルは別途優先。 */
+  table.wbs tr.wbs-inprogress td{background:#e8f5e9}   /* 進行中かつ未完了＝薄緑 */
+  table.wbs tr.wbs-onhold td{background:#fff8e1}       /* 保留かつ未完了＝薄黄色 */
+  /* 完了タスク行(level2,progress>=100)の背景を控えめに濃く。完了を最優先（進行中/保留より後に定義して上書き） */
   table.wbs tr.wbs-done td{background:#eef0f2}
   .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 
@@ -253,8 +257,10 @@
         <label style="font-size:12px;color:var(--muted)">状態：
           <select id="wbsFilterStatus">
             <option value="">すべて</option>
-            <option value="done">完了のみ</option>
-            <option value="undone">未完了のみ</option>
+            <option value="done">完了</option>
+            <option value="st:notstarted">未着手</option>
+            <option value="st:inprogress">進行中</option>
+            <option value="st:blocked">保留</option>
           </select></label>
         <span style="color:var(--muted);font-size:12px">レベル：⇤/⇥ ｜ 並べ替え：⇧/⇩</span>
       </div>
@@ -348,7 +354,7 @@ let backupHandle = null;
 let verBumped = false;   // 1編集セッションにつき版を1回だけ自動更新
 let wbsFilterAssignee = "";  // 表示専用：担当者フィルタ（""=全員）。DB/sort_orderには影響しない
 let wbsSortOrder = "wbs";    // 表示専用：並び順（wbs=既定/start/end）
-let wbsFilterStatus = "";    // 表示専用：状態フィルタ（""=すべて/done=完了のみ/undone=未完了のみ）。level2の進捗>=100を完了とみなす
+let wbsFilterStatus = "";    // 表示専用：状態フィルタ（""=すべて / done=完了(進捗>=100) / "st:<status値>"=該当ステータスのlevel2のみ）。DB非変更
 
 /* ---------- ユーティリティ ---------- */
 const $ = s => document.querySelector(s);
@@ -480,10 +486,14 @@ function renderWbs(){
      既定（全員／WBS順）では元配列そのままを順番通り描画＝従来と完全一致。 */
   let displayed = tasks.map((t,i)=>({t,i}));
   if(wbsFilterAssignee){ displayed = displayed.filter(o=>(o.t.assignee||"")===wbsFilterAssignee); }
-  /* 状態フィルタ：完了=progress>=100。タスク(level2)のみを対象に絞り込む（フェーズ見出しlevel1は除外）。
+  /* 状態フィルタ：完了=progress>=100。"st:<status値>"＝該当statusのlevel2タスクのみ表示。
+     タスク(level2)のみを対象に絞り込む（フェーズ見出しlevel1は除外）。
      既定（""=すべて）では従来通り全行表示。担当者/並び順とANDで併用。 */
   if(wbsFilterStatus==="done"){ displayed = displayed.filter(o=>(o.t.level||1)===2 && (o.t.progress||0)>=100); }
-  else if(wbsFilterStatus==="undone"){ displayed = displayed.filter(o=>(o.t.level||1)===2 && (o.t.progress||0)<100); }
+  else if(wbsFilterStatus && wbsFilterStatus.startsWith("st:")){
+    const wantStatus = wbsFilterStatus.slice(3);
+    displayed = displayed.filter(o=>(o.t.level||1)===2 && (o.t.status||"notstarted")===wantStatus);
+  }
   if(wbsSortOrder==="start" || wbsSortOrder==="end"){
     const key = wbsSortOrder==="start" ? "start" : "end";
     // 日付ソート時は階層をフラット化し日付順。日付なしは末尾、同日は元順を維持（安定）
@@ -496,8 +506,16 @@ function renderWbs(){
   const flat = (wbsSortOrder!=="wbs");  // 日付ソート時はサマリ強調を無効化（フラット表示）
   displayed.forEach(({t,i})=>{
     const isSummary=!flat&&(i+1<tasks.length)&&tasks[i+1].level>t.level;
-    const isDone=(t.level||1)===2&&(t.progress||0)>=100;  // 完了タスク行（背景を控えめに濃く）
-    const tr=el("tr","lvl"+(t.level||1)+(isSummary?" summary":"")+(isDone?" wbs-done":"")); tr.dataset.idx=i;
+    const isL2=(t.level||1)===2;
+    const isDone=isL2&&(t.progress||0)>=100;  // 完了タスク行（背景を控えめに濃く・最優先）
+    // ステータス別背景（level2・未完了のみ）。完了が最優先のため done でない場合のみ付与。
+    let statusCls="";
+    if(isL2 && !isDone){
+      const st=t.status||"notstarted";
+      if(st==="inprogress") statusCls=" wbs-inprogress";   // 進行中＝薄緑
+      else if(st==="blocked") statusCls=" wbs-onhold";     // 保留＝薄黄色
+    }
+    const tr=el("tr","lvl"+(t.level||1)+(isSummary?" summary":"")+(isDone?" wbs-done":statusCls)); tr.dataset.idx=i;
     const tdNum=el("td","num"); tdNum.textContent=wbsNumber(tasks,i); tr.appendChild(tdNum);
     const tdTask=el("td","task"); const wrap=el("div","indent-wrap");
     const drag=el("span","rowdrag"); drag.textContent="⋮⋮";
