@@ -93,6 +93,8 @@
   tr.lvl2 td.task .indent-wrap{padding-left:18px}
   tr.lvl3 td.task .indent-wrap{padding-left:36px}
   tr.summary{background:#fafbfd;font-weight:600}
+  /* 完了タスク行(level2,progress>=100)の背景を控えめに濃く。装飾のみ・既存スタイルは維持 */
+  table.wbs tr.wbs-done td{background:#eef0f2}
   .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 
   .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}
@@ -248,6 +250,12 @@
             <option value="start">開始日が早い順</option>
             <option value="end">終了日が早い順</option>
           </select></label>
+        <label style="font-size:12px;color:var(--muted)">状態：
+          <select id="wbsFilterStatus">
+            <option value="">すべて</option>
+            <option value="done">完了のみ</option>
+            <option value="undone">未完了のみ</option>
+          </select></label>
         <span style="color:var(--muted);font-size:12px">レベル：⇤/⇥ ｜ 並べ替え：⇧/⇩</span>
       </div>
       <div class="tablewrap"><table class="wbs">
@@ -340,6 +348,7 @@ let backupHandle = null;
 let verBumped = false;   // 1編集セッションにつき版を1回だけ自動更新
 let wbsFilterAssignee = "";  // 表示専用：担当者フィルタ（""=全員）。DB/sort_orderには影響しない
 let wbsSortOrder = "wbs";    // 表示専用：並び順（wbs=既定/start/end）
+let wbsFilterStatus = "";    // 表示専用：状態フィルタ（""=すべて/done=完了のみ/undone=未完了のみ）。level2の進捗>=100を完了とみなす
 
 /* ---------- ユーティリティ ---------- */
 const $ = s => document.querySelector(s);
@@ -471,6 +480,10 @@ function renderWbs(){
      既定（全員／WBS順）では元配列そのままを順番通り描画＝従来と完全一致。 */
   let displayed = tasks.map((t,i)=>({t,i}));
   if(wbsFilterAssignee){ displayed = displayed.filter(o=>(o.t.assignee||"")===wbsFilterAssignee); }
+  /* 状態フィルタ：完了=progress>=100。タスク(level2)のみを対象に絞り込む（フェーズ見出しlevel1は除外）。
+     既定（""=すべて）では従来通り全行表示。担当者/並び順とANDで併用。 */
+  if(wbsFilterStatus==="done"){ displayed = displayed.filter(o=>(o.t.level||1)===2 && (o.t.progress||0)>=100); }
+  else if(wbsFilterStatus==="undone"){ displayed = displayed.filter(o=>(o.t.level||1)===2 && (o.t.progress||0)<100); }
   if(wbsSortOrder==="start" || wbsSortOrder==="end"){
     const key = wbsSortOrder==="start" ? "start" : "end";
     // 日付ソート時は階層をフラット化し日付順。日付なしは末尾、同日は元順を維持（安定）
@@ -483,7 +496,8 @@ function renderWbs(){
   const flat = (wbsSortOrder!=="wbs");  // 日付ソート時はサマリ強調を無効化（フラット表示）
   displayed.forEach(({t,i})=>{
     const isSummary=!flat&&(i+1<tasks.length)&&tasks[i+1].level>t.level;
-    const tr=el("tr","lvl"+(t.level||1)+(isSummary?" summary":"")); tr.dataset.idx=i;
+    const isDone=(t.level||1)===2&&(t.progress||0)>=100;  // 完了タスク行（背景を控えめに濃く）
+    const tr=el("tr","lvl"+(t.level||1)+(isSummary?" summary":"")+(isDone?" wbs-done":"")); tr.dataset.idx=i;
     const tdNum=el("td","num"); tdNum.textContent=wbsNumber(tasks,i); tr.appendChild(tdNum);
     const tdTask=el("td","task"); const wrap=el("div","indent-wrap");
     const drag=el("span","rowdrag"); drag.textContent="⋮⋮";
@@ -580,6 +594,7 @@ $("#addTask").onclick=addTask;
 /* 表示専用コントロール：状態を変えてWBSのみ再描画（DB/同期/ガント等には触れない） */
 $("#wbsFilterAssignee").onchange=e=>{ wbsFilterAssignee=e.target.value; renderWbs(); };
 $("#wbsSortOrder").onchange=e=>{ wbsSortOrder=e.target.value; renderWbs(); };
+$("#wbsFilterStatus").onchange=e=>{ wbsFilterStatus=e.target.value; renderWbs(); };
 
 /* ===================== KPI ===================== */
 function renderKpis(){
