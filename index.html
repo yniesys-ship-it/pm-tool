@@ -93,11 +93,12 @@
   tr.lvl2 td.task .indent-wrap{padding-left:18px}
   tr.lvl3 td.task .indent-wrap{padding-left:36px}
   tr.summary{background:#fafbfd;font-weight:600}
-  /* ステータス別の行背景色（level2タスク行・装飾のみ）。優先順位＝完了 > 進行中 > 保留 > 未着手(色なし)。
+  /* ステータス別の行背景色（level2タスク行・装飾のみ）。色分けは status 基準に統一。
      入力欄/selectは background:transparent のため透過は維持される。summary行・既存スタイルは別途優先。 */
-  table.wbs tr.wbs-inprogress td{background:#e8f5e9}   /* 進行中かつ未完了＝薄緑 */
-  table.wbs tr.wbs-onhold td{background:#fff8e1}       /* 保留かつ未完了＝薄黄色 */
-  /* 完了タスク行(level2,progress>=100)の背景を控えめに濃く。完了を最優先（進行中/保留より後に定義して上書き） */
+  table.wbs tr.wbs-inprogress td{background:#e8f5e9}   /* 進行中＝薄緑 */
+  table.wbs tr.wbs-onhold td{background:#fff8e1}       /* 保留＝薄黄色 */
+  table.wbs tr.wbs-awaiting td{background:#e3f0fb}     /* 完了待ち＝薄青（控えめ） */
+  /* 完了行(status=done)の背景を控えめに薄グレー。 */
   table.wbs tr.wbs-done td{background:#eef0f2}
   .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 
@@ -258,6 +259,7 @@
           <select id="wbsFilterStatus">
             <option value="">すべて</option>
             <option value="done">完了</option>
+            <option value="st:awaiting">完了待ち</option>
             <option value="st:notstarted">未着手</option>
             <option value="st:inprogress">進行中</option>
             <option value="st:blocked">保留</option>
@@ -489,7 +491,7 @@ function renderWbs(){
   /* 状態フィルタ：完了=progress>=100。"st:<status値>"＝該当statusのlevel2タスクのみ表示。
      タスク(level2)のみを対象に絞り込む（フェーズ見出しlevel1は除外）。
      既定（""=すべて）では従来通り全行表示。担当者/並び順とANDで併用。 */
-  if(wbsFilterStatus==="done"){ displayed = displayed.filter(o=>(o.t.level||1)===2 && (o.t.progress||0)>=100); }
+  if(wbsFilterStatus==="done"){ displayed = displayed.filter(o=>(o.t.level||1)===2 && (o.t.status||"")==="done"); }
   else if(wbsFilterStatus && wbsFilterStatus.startsWith("st:")){
     const wantStatus = wbsFilterStatus.slice(3);
     displayed = displayed.filter(o=>(o.t.level||1)===2 && (o.t.status||"notstarted")===wantStatus);
@@ -507,15 +509,17 @@ function renderWbs(){
   displayed.forEach(({t,i})=>{
     const isSummary=!flat&&(i+1<tasks.length)&&tasks[i+1].level>t.level;
     const isL2=(t.level||1)===2;
-    const isDone=isL2&&(t.progress||0)>=100;  // 完了タスク行（背景を控えめに濃く・最優先）
-    // ステータス別背景（level2・未完了のみ）。完了が最優先のため done でない場合のみ付与。
+    // 行の色分けは status 基準に統一（level2タスク行のみ）。progress では判定しない。
+    // done=薄グレー / awaiting(完了待ち)=薄青 / inprogress=薄緑 / blocked(保留)=薄黄 / notstarted=色なし
     let statusCls="";
-    if(isL2 && !isDone){
+    if(isL2){
       const st=t.status||"notstarted";
-      if(st==="inprogress") statusCls=" wbs-inprogress";   // 進行中＝薄緑
-      else if(st==="blocked") statusCls=" wbs-onhold";     // 保留＝薄黄色
+      if(st==="done") statusCls=" wbs-done";
+      else if(st==="awaiting") statusCls=" wbs-awaiting";
+      else if(st==="inprogress") statusCls=" wbs-inprogress";
+      else if(st==="blocked") statusCls=" wbs-onhold";
     }
-    const tr=el("tr","lvl"+(t.level||1)+(isSummary?" summary":"")+(isDone?" wbs-done":statusCls)); tr.dataset.idx=i;
+    const tr=el("tr","lvl"+(t.level||1)+(isSummary?" summary":"")+statusCls); tr.dataset.idx=i;
     const tdNum=el("td","num"); tdNum.textContent=wbsNumber(tasks,i); tr.appendChild(tdNum);
     const tdTask=el("td","task"); const wrap=el("div","indent-wrap");
     const drag=el("span","rowdrag"); drag.textContent="⋮⋮";
@@ -530,7 +534,7 @@ function renderWbs(){
     rng.oninput=()=>{t.progress=+rng.value; pv.textContent=t.progress+"%"; autoStatus(t); persistTask(t);};
     pc.appendChild(rng); pc.appendChild(pv); tdP.appendChild(pc); tr.appendChild(tdP);
     const tdS=el("td"); const sel=el("select");
-    [["notstarted","未着手"],["inprogress","進行中"],["done","完了"],["blocked","保留"]].forEach(([v,l])=>{ const o=el("option");o.value=v;o.textContent=l;sel.appendChild(o); });
+    [["notstarted","未着手"],["inprogress","進行中"],["done","完了"],["awaiting","完了待ち"],["blocked","保留"]].forEach(([v,l])=>{ const o=el("option");o.value=v;o.textContent=l;sel.appendChild(o); });
     sel.value=t.status||"notstarted"; sel.onchange=()=>{t.status=sel.value; if(sel.value==="done")t.progress=100; renderWbs(); persistTask(t);};
     tdS.appendChild(sel); tr.appendChild(tdS);
     const tdDep=el("td","num"); const depIn=el("input"); depIn.value=t.dep||""; depIn.placeholder="#"; depIn.style.textAlign="center"; depIn.title="先行WBS番号(例 1.2)"; depIn.oninput=()=>{t.dep=depIn.value; persistTask(t);}; tdDep.appendChild(depIn); tr.appendChild(tdDep);
@@ -599,7 +603,7 @@ async function openDeliverable(key,label){
     setSync("on","同期済み");
   }catch(e){ if(w){try{w.close();}catch(_){}} setSync("err","表示失敗"); toast("「"+(label||key)+"」を開けません: "+(e.message||e),true); }
 }
-function autoStatus(t){ if(t.progress>=100)t.status="done"; else if(t.progress>0&&t.status!=="blocked")t.status="inprogress"; }
+function autoStatus(t){ if(t.status==="awaiting"||t.status==="blocked")return; if(t.progress>=100)t.status="done"; else if(t.progress>0)t.status="inprogress"; }
 function durationOf(t){ const a=parseDate(t.start),b=parseDate(t.end); if(!a||!b)return"–"; const d=dayDiff(a,b)+1; return d<=0?"–":d; }
 function wbsNumber(tasks,idx){ const c=[0,0,0]; for(let i=0;i<=idx;i++){ const lv=(tasks[i].level||1)-1; c[lv]++; for(let j=lv+1;j<3;j++)c[j]=0; } const lv=(tasks[idx].level||1)-1; return c.slice(0,lv+1).join("."); }
 
