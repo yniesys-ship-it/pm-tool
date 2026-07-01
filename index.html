@@ -646,7 +646,7 @@ function durationOf(t){ const a=parseDate(t.start),b=parseDate(t.end); if(!a||!b
 function wbsNumber(tasks,idx){ const c=[0,0,0]; for(let i=0;i<=idx;i++){ const lv=(tasks[i].level||1)-1; c[lv]++; for(let j=lv+1;j<3;j++)c[j]=0; } const lv=(tasks[idx].level||1)-1; return c.slice(0,lv+1).join("."); }
 
 let taskTimers={};
-function persistTask(t){ clearTimeout(taskTimers[t.id]); taskTimers[t.id]=setTimeout(()=>{ const order=cur().tasks.indexOf(t); guard(db.from("tasks").upsert(taskToRow(t,store.current,order)),"タスクの保存"); },400); }
+function persistTask(t){ clearTimeout(taskTimers[t.id]); taskTimers[t.id]=setTimeout(()=>{ const order=cur().tasks.indexOf(t); if(order<0) return; /* リアルタイム更新と競合して配列に無い時はsort_order破損(-1)を防ぐため保存しない */ guard(db.from("tasks").upsert(taskToRow(t,store.current,order)),"タスクの保存"); },400); }
 async function addTask(){ const t={id:uuidv4(),title:"",level:1,assignee:"",start:"",end:"",progress:0,status:"notstarted",dep:"",_ord:cur().tasks.length}; cur().tasks.push(t); renderWbs(); await guard(db.from("tasks").insert(taskToRow(t,store.current,cur().tasks.length-1)),"タスクの追加"); }
 async function deleteTask(i){ const t=cur().tasks[i]; cur().tasks.splice(i,1); renderWbs(); await guard(db.from("tasks").delete().eq("id",t.id),"タスクの削除"); }
 async function moveTask(i,dir){ const a=cur().tasks; const j=i+dir; if(j<0||j>=a.length)return; [a[i],a[j]]=[a[j],a[i]]; a[i]._ord=i; a[j]._ord=j; renderWbs(); await guard(db.from("tasks").upsert([taskToRow(a[i],store.current,i),taskToRow(a[j],store.current,j)]),"並べ替えの保存"); }
