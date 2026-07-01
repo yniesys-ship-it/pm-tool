@@ -95,11 +95,12 @@
   tr.summary{background:#fafbfd;font-weight:600}
   /* ステータス別の行背景色（level2タスク行・装飾のみ）。色分けは status 基準に統一。
      入力欄/selectは background:transparent のため透過は維持される。summary行・既存スタイルは別途優先。 */
-  table.wbs tr.wbs-inprogress td{background:#e8f5e9}   /* 進行中＝薄緑 */
-  table.wbs tr.wbs-onhold td{background:#fff8e1}       /* 保留＝薄黄色 */
-  table.wbs tr.wbs-awaiting td{background:#e3f0fb}     /* 完了待ち＝薄青（控えめ） */
-  /* 完了行(status=done)の背景を控えめに薄グレー。 */
-  table.wbs tr.wbs-done td{background:#eef0f2}
+  table.wbs tr.wbs-inprogress td{background:#e8f5e9}   /* 進行中＝緑 */
+  table.wbs tr.wbs-onhold td{background:#fff8e1}       /* 保留＝黄 */
+  table.wbs tr.wbs-overdue td{background:#fde2e2}      /* 延滞（期限超過・未完了）＝赤 */
+  table.wbs tr.wbs-awaiting td{background:#eaf2fb}     /* 完了待ち＝薄い青 */
+  table.wbs tr.wbs-done td{background:#cfe2ff}         /* 完了＝青 */
+  table.wbs tr.wbs-locked td{background:#eceef1}       /* ロック中＝グレー（先行タスク未完了） */
   .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 
   .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}
@@ -352,6 +353,8 @@ let dayPx = 14;
 let editingActive = false, pendingRender = false, blurTimer = null;
 let channel = null;
 let currentUser = null;
+let pmOverride = false;
+const PM_EMAIL = "y.nie.sys@gmail.com";
 let backupHandle = null;
 let verBumped = false;   // 1編集セッションにつき版を1回だけ自動更新
 let wbsFilterAssignee = "";  // 表示専用：担当者フィルタ（""=全員）。DB/sort_orderには影響しない
@@ -506,18 +509,28 @@ function renderWbs(){
     });
   }
   const flat = (wbsSortOrder!=="wbs");  // 日付ソート時はサマリ強調を無効化（フラット表示）
+  ensurePmToggle();
+  const numMap = wbsNumMap(tasks);
+  const _today = new Date(); _today.setHours(0,0,0,0);
+  const pmSee = isPM() && pmOverride;   // PMが全体ビューON＝ロック無効で全部見える/編集可
   displayed.forEach(({t,i})=>{
     const isSummary=!flat&&(i+1<tasks.length)&&tasks[i+1].level>t.level;
     const isL2=(t.level||1)===2;
     // 行の色分けは status 基準に統一（level2タスク行のみ）。progress では判定しない。
     // done=薄グレー / awaiting(完了待ち)=薄青 / inprogress=薄緑 / blocked(保留)=薄黄 / notstarted=色なし
-    let statusCls="";
+    let statusCls=""; let locked=false;
     if(isL2){
       const st=t.status||"notstarted";
+      locked = !pmSee && taskLocked(t,numMap);
+      const _end=parseDate(t.end);
+      const overdue = _end && _end<_today && st!=="done";
+      // 優先度：完了(青) > ロック(グレー) > 保留(黄) > 延滞(赤) > 進行中(緑) > 完了待ち(薄青)
       if(st==="done") statusCls=" wbs-done";
-      else if(st==="awaiting") statusCls=" wbs-awaiting";
-      else if(st==="inprogress") statusCls=" wbs-inprogress";
+      else if(locked) statusCls=" wbs-locked";
       else if(st==="blocked") statusCls=" wbs-onhold";
+      else if(overdue) statusCls=" wbs-overdue";
+      else if(st==="inprogress") statusCls=" wbs-inprogress";
+      else if(st==="awaiting") statusCls=" wbs-awaiting";
     }
     const tr=el("tr","lvl"+(t.level||1)+(isSummary?" summary":"")+statusCls); tr.dataset.idx=i;
     const tdNum=el("td","num"); tdNum.textContent=wbsNumber(tasks,i); tr.appendChild(tdNum);
@@ -531,11 +544,13 @@ function renderWbs(){
     const tdP=el("td"); const pc=el("div","prog-cell");
     const rng=el("input"); rng.type="range"; rng.min=0;rng.max=100;rng.step=5;rng.value=t.progress||0;
     const pv=el("span","pv"); pv.textContent=(t.progress||0)+"%";
+    if(locked){ rng.disabled=true; rng.title="先行タスクが完了するまでロック中"; }
     rng.oninput=()=>{t.progress=+rng.value; pv.textContent=t.progress+"%"; autoStatus(t); persistTask(t);};
     pc.appendChild(rng); pc.appendChild(pv); tdP.appendChild(pc); tr.appendChild(tdP);
     const tdS=el("td"); const sel=el("select");
     [["notstarted","未着手"],["inprogress","進行中"],["done","完了"],["awaiting","完了待ち"],["blocked","保留"]].forEach(([v,l])=>{ const o=el("option");o.value=v;o.textContent=l;sel.appendChild(o); });
-    sel.value=t.status||"notstarted"; sel.onchange=()=>{t.status=sel.value; if(sel.value==="done")t.progress=100; renderWbs(); persistTask(t);};
+    sel.value=t.status||"notstarted"; if(locked){ sel.disabled=true; sel.title="先行タスクが完了するまでロック中"; }
+    sel.onchange=()=>{t.status=sel.value; if(sel.value==="done")t.progress=100; renderWbs(); persistTask(t);};
     tdS.appendChild(sel); tr.appendChild(tdS);
     const tdDep=el("td","num"); const depIn=el("input"); depIn.value=t.dep||""; depIn.placeholder="#"; depIn.style.textAlign="center"; depIn.title="先行WBS番号(例 1.2)"; depIn.oninput=()=>{t.dep=depIn.value; persistTask(t);}; tdDep.appendChild(depIn); tr.appendChild(tdDep);
     const tdTask2=el("td"); const tgWrap=el("div"); tgWrap.style.padding="4px 6px";
@@ -602,6 +617,29 @@ async function openDeliverable(key,label){
     if(w){ w.location=u; } else { window.open(u,"_blank"); }
     setSync("on","同期済み");
   }catch(e){ if(w){try{w.close();}catch(_){}} setSync("err","表示失敗"); toast("「"+(label||key)+"」を開けません: "+(e.message||e),true); }
+}
+function isPM(){ return !!(currentUser && currentUser.email===PM_EMAIL); }
+/* WBS番号→タスクの対応表（先行タスク解決用） */
+function wbsNumMap(tasks){ const m={}; for(let i=0;i<tasks.length;i++){ m[wbsNumber(tasks,i)]=tasks[i]; } return m; }
+/* 先行タスク（dep＝WBS番号・複数可）が1つでも「完了」でなければロック */
+function taskLocked(t,numMap){
+  const deps=String(t.dep||"").split(/[^0-9.]+/).map(s=>s.trim()).filter(Boolean);
+  for(const d of deps){ const p=numMap[d]; if(p && (p.status||"notstarted")!=="done") return true; }
+  return false;
+}
+/* PMアカウントのみ「全体ビュー（ロック解除）」トグルを表示 */
+function ensurePmToggle(){
+  const anchor=$("#wbsFilterStatus"); if(!anchor) return;
+  let box=$("#pmViewToggle");
+  if(!isPM()){ if(box) box.style.display="none"; return; }
+  if(!box){
+    box=el("label"); box.id="pmViewToggle"; box.style.cssText="font-size:12px;display:inline-flex;align-items:center;gap:4px;margin-left:8px";
+    const cb=el("input"); cb.type="checkbox"; cb.id="pmViewChk"; cb.checked=pmOverride;
+    cb.onchange=()=>{ pmOverride=cb.checked; renderWbs(); };
+    box.appendChild(cb); box.appendChild(document.createTextNode("全体ビュー(PM・ロック解除)"));
+    anchor.parentNode.insertBefore(box, anchor.nextSibling);
+  }
+  box.style.display="inline-flex";
 }
 function autoStatus(t){ if(t.status==="awaiting"||t.status==="blocked")return; if(t.progress>=100)t.status="done"; else if(t.progress>0)t.status="inprogress"; }
 function durationOf(t){ const a=parseDate(t.start),b=parseDate(t.end); if(!a||!b)return"–"; const d=dayDiff(a,b)+1; return d<=0?"–":d; }
