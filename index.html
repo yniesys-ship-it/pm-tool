@@ -255,6 +255,7 @@
             <option value="wbs">WBS順</option>
             <option value="start">開始日が早い順</option>
             <option value="end">終了日が早い順</option>
+            <option value="unlocked">着手可能を上に（ロック解除・未完了）</option>
           </select></label>
         <label style="font-size:12px;color:var(--muted)">状態：
           <select id="wbsFilterStatus">
@@ -499,6 +500,10 @@ function renderWbs(){
     const wantStatus = wbsFilterStatus.slice(3);
     displayed = displayed.filter(o=>(o.t.level||1)===2 && (o.t.status||"notstarted")===wantStatus);
   }
+  ensurePmToggle();
+  const numMap = wbsNumMap(tasks);
+  const _today = new Date(); _today.setHours(0,0,0,0);
+  const pmSee = isPM() && pmOverride;   // PMが全体ビューON＝ロック無効で全部見える/編集可
   if(wbsSortOrder==="start" || wbsSortOrder==="end"){
     const key = wbsSortOrder==="start" ? "start" : "end";
     // 日付ソート時は階層をフラット化し日付順。日付なしは末尾、同日は元順を維持（安定）
@@ -507,12 +512,12 @@ function renderWbs(){
       if(dx&&dy){ const d=dx-dy; return d!==0?d:(x.i-y.i); }
       if(dx&&!dy) return -1; if(!dx&&dy) return 1; return x.i-y.i;
     });
+  } else if(wbsSortOrder==="unlocked"){
+    // 着手可能（level2・ロック解除・未完了）を上に。順序は元のWBS順を維持（安定ソート）
+    const rank=(o)=>{ const t=o.t; if((t.level||1)!==2) return 2; const done=(t.status||"")==="done"; const locked=!pmSee && taskLocked(t,numMap); return (!locked && !done) ? 0 : 1; };
+    displayed = displayed.slice().sort((x,y)=>{ const r=rank(x)-rank(y); return r!==0?r:(x.i-y.i); });
   }
-  const flat = (wbsSortOrder!=="wbs");  // 日付ソート時はサマリ強調を無効化（フラット表示）
-  ensurePmToggle();
-  const numMap = wbsNumMap(tasks);
-  const _today = new Date(); _today.setHours(0,0,0,0);
-  const pmSee = isPM() && pmOverride;   // PMが全体ビューON＝ロック無効で全部見える/編集可
+  const flat = (wbsSortOrder!=="wbs");  // 日付/アンロックソート時はサマリ強調を無効化（フラット表示）
   displayed.forEach(({t,i})=>{
     const isSummary=!flat&&(i+1<tasks.length)&&tasks[i+1].level>t.level;
     const isL2=(t.level||1)===2;
