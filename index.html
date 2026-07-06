@@ -93,14 +93,20 @@
   tr.lvl2 td.task .indent-wrap{padding-left:18px}
   tr.lvl3 td.task .indent-wrap{padding-left:36px}
   tr.summary{background:#fafbfd;font-weight:600}
-  /* ステータス別の行背景色（level2タスク行・装飾のみ）。色分けは status 基準に統一。
-     入力欄/selectは background:transparent のため透過は維持される。summary行・既存スタイルは別途優先。 */
-  table.wbs tr.wbs-inprogress td{background:#e8f5e9}   /* 進行中＝緑 */
-  table.wbs tr.wbs-onhold td{background:#fff8e1}       /* 保留＝黄 */
-  table.wbs tr.wbs-overdue td{background:#fde2e2}      /* 延滞（期限超過・未完了）＝赤 */
-  table.wbs tr.wbs-awaiting td{background:#eaf2fb}     /* 完了待ち＝薄い青 */
-  table.wbs tr.wbs-done td{background:#cfe2ff}         /* 完了＝青 */
-  table.wbs tr.wbs-locked td{background:#eceef1}       /* ロック中＝グレー（先行タスク未完了） */
+  /* ロック中（先行未完了）＝濃いめグレー＋操作/リンク不可（行全体） */
+  table.wbs tr.wbs-locked td{background:#c8ccd3;color:#6b7178}
+  table.wbs tr.wbs-locked a{pointer-events:none;color:#9aa3af!important;text-decoration:none}
+  /* 延滞（期限超過・未完了）＝終了日セルを赤字（行全体は塗らない） */
+  table.wbs td.overdue-date input{color:#c0392b;font-weight:700}
+  /* ステータスはNotion風の色付きタブ（行全体は塗らない） */
+  table.wbs select.st-pill{border:none;border-radius:10px;padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer;-webkit-appearance:none;appearance:none}
+  select.st-notstarted{background:#eceef1;color:#5b6570}
+  select.st-inprogress{background:#d3ecd5;color:#1e6b2b}
+  select.st-onhold{background:#fdeec2;color:#8a6d1a}
+  select.st-done{background:#cfe2ff;color:#1c4e9c}
+  select.st-awaiting{background:#dbe9fb;color:#3a5f8a}
+  /* フェーズ見出し(level1)＝タスク行と分けた帯表示 */
+  table.wbs tr.phase-row td{background:#1f3a5f;color:#fff;border-color:#1f3a5f}
   .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 
   .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}
@@ -523,20 +529,29 @@ function renderWbs(){
     const isL2=(t.level||1)===2;
     // 行の色分けは status 基準に統一（level2タスク行のみ）。progress では判定しない。
     // done=薄グレー / awaiting(完了待ち)=薄青 / inprogress=薄緑 / blocked(保留)=薄黄 / notstarted=色なし
-    let statusCls=""; let locked=false;
+    let locked=false, overdue=false;
     if(isL2){
       const st=t.status||"notstarted";
       locked = !pmSee && taskLocked(t,numMap);
       const _end=parseDate(t.end);
-      const overdue = _end && _end<_today && st!=="done";
-      // 優先度：完了(青) > ロック(グレー) > 保留(黄) > 延滞(赤) > 進行中(緑) > 完了待ち(薄青)
-      if(st==="done") statusCls=" wbs-done";
-      else if(locked) statusCls=" wbs-locked";
-      else if(st==="blocked") statusCls=" wbs-onhold";
-      else if(overdue) statusCls=" wbs-overdue";
-      else if(st==="inprogress") statusCls=" wbs-inprogress";
-      else if(st==="awaiting") statusCls=" wbs-awaiting";
+      overdue = !!(_end && _end<_today && st!=="done");
     }
+    // フェーズ見出し(level1)はタスク行と分けて「帯」で表示（進捗/ステータス等は出さない）
+    if((t.level||1)===1){
+      const ptr=el("tr","phase-row"); ptr.dataset.idx=i;
+      const ptd=el("td"); ptd.colSpan=12;
+      const pw=el("div"); pw.style.cssText="display:flex;align-items:center;gap:8px";
+      const pn=el("span"); pn.textContent=wbsNumber(tasks,i); pn.style.cssText="opacity:.85;min-width:22px;font-weight:700";
+      const pin=el("textarea"); pin.value=t.title||""; pin.rows=1; pin.title=t.title||""; pin.style.cssText="flex:1;border:none;background:transparent;resize:none;font-family:inherit;font-size:14px;font-weight:700;color:#fff;padding:2px 4px"; pin.oninput=()=>{t.title=pin.value; persistTask(t);};
+      pw.appendChild(pn); pw.appendChild(pin);
+      const mkp=(lb,fn)=>{ const b=el("button","lvlbtn"); b.textContent=lb; b.onclick=fn; b.style.cssText="color:#fff;border-color:#ffffff55;background:transparent"; return b; };
+      pw.appendChild(mkp("⇥",()=>{t.level=Math.min(3,(t.level||1)+1);renderWbs();persistTask(t);}));
+      pw.appendChild(mkp("⇧",()=>moveTask(i,-1)));
+      pw.appendChild(mkp("⇩",()=>moveTask(i,1)));
+      const pdel=el("button","rowdel"); pdel.textContent="✕"; pdel.title="削除"; pdel.style.color="#fff"; pdel.onclick=()=>deleteTask(i); pw.appendChild(pdel);
+      ptd.appendChild(pw); ptr.appendChild(ptd); tb.appendChild(ptr); return;
+    }
+    const statusCls = locked ? " wbs-locked" : "";
     const tr=el("tr","lvl"+(t.level||1)+(isSummary?" summary":"")+statusCls); tr.dataset.idx=i;
     const tdNum=el("td","num"); tdNum.textContent=wbsNumber(tasks,i); tr.appendChild(tdNum);
     const tdTask=el("td","task"); const wrap=el("div","indent-wrap");
@@ -544,7 +559,7 @@ function renderWbs(){
     const inName=el("textarea"); inName.value=t.title||""; inName.placeholder="タスク名"; inName.rows=2; inName.title=t.title||""; inName.style.cssText="width:100%;border:none;background:transparent;resize:vertical;font-family:inherit;font-size:13px;line-height:1.45;min-height:34px;padding:6px 8px;color:var(--ink)"; inName.oninput=()=>{t.title=inName.value; inName.title=inName.value; persistTask(t);};
     wrap.appendChild(drag); wrap.appendChild(inName); tdTask.appendChild(wrap); tr.appendChild(tdTask);
     tr.appendChild(cellInput(t,"assignee","担当"));
-    tr.appendChild(cellDate(t,"start")); tr.appendChild(cellDate(t,"end"));
+    tr.appendChild(cellDate(t,"start")); const _endCell=cellDate(t,"end"); if(overdue) _endCell.classList.add("overdue-date"); tr.appendChild(_endCell);
     const tdDur=el("td","num"); tdDur.textContent=durationOf(t); tr.appendChild(tdDur);
     const tdP=el("td"); const pc=el("div","prog-cell");
     const rng=el("input"); rng.type="range"; rng.min=0;rng.max=100;rng.step=5;rng.value=t.progress||0;
@@ -554,7 +569,7 @@ function renderWbs(){
     pc.appendChild(rng); pc.appendChild(pv); tdP.appendChild(pc); tr.appendChild(tdP);
     const tdS=el("td"); const sel=el("select");
     [["notstarted","未着手"],["inprogress","進行中"],["done","完了"],["awaiting","完了待ち"],["blocked","保留"]].forEach(([v,l])=>{ const o=el("option");o.value=v;o.textContent=l;sel.appendChild(o); });
-    sel.value=t.status||"notstarted"; if(locked){ sel.disabled=true; sel.title="先行タスクが完了するまでロック中"; }
+    sel.value=t.status||"notstarted"; sel.className="st-pill st-"+(t.status||"notstarted"); if(locked){ sel.disabled=true; sel.title="先行タスクが完了するまでロック中"; }
     sel.onchange=()=>{t.status=sel.value; if(sel.value==="done")t.progress=100; renderWbs(); persistTask(t);};
     tdS.appendChild(sel); tr.appendChild(tdS);
     const tdDep=el("td","num"); const depIn=el("input"); depIn.value=t.dep||""; depIn.placeholder="#"; depIn.style.textAlign="center"; depIn.title="先行WBS番号(例 1.2)"; depIn.oninput=()=>{t.dep=depIn.value; persistTask(t);}; tdDep.appendChild(depIn); tr.appendChild(tdDep);
@@ -576,7 +591,9 @@ function renderWbs(){
     tdOp.appendChild(mkBtn("⇧",()=>moveTask(i,-1)));
     tdOp.appendChild(mkBtn("⇩",()=>moveTask(i,1)));
     const del=el("button","rowdel"); del.textContent="✕"; del.title="削除"; del.onclick=()=>deleteTask(i); tdOp.appendChild(del);
-    tr.appendChild(tdOp); tb.appendChild(tr);
+    tr.appendChild(tdOp);
+    if(locked){ tr.querySelectorAll("input,textarea,select").forEach(e=>{ e.disabled=true; }); }  /* ロック時は全入力を選択不可（リンクはCSSで無効化） */
+    tb.appendChild(tr);
   });
   renderKpis();
 }
