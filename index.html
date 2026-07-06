@@ -77,7 +77,7 @@
   .tablewrap{overflow-x:auto}
   table.wbs{border-collapse:collapse;width:100%;min-width:1380px}
   table.wbs th,table.wbs td{border:1px solid var(--line);padding:0;text-align:left;vertical-align:middle}
-  table.wbs th{background:#f7f9fc;font-size:12px;color:var(--muted);padding:8px 10px;position:sticky;top:0;white-space:nowrap}
+  table.wbs th{background:#1f3a5f;font-size:12px;color:#fff;font-weight:700;padding:8px 10px;position:sticky;top:0;white-space:nowrap;z-index:2}  /* ヘッダー行＝最も目立つ濃紺 */
   table.wbs td input,table.wbs td select{border:none;background:transparent;width:100%;height:36px;padding:0 8px;color:var(--ink)}
   table.wbs td input:focus,table.wbs td select:focus{outline:2px solid var(--accent-soft);border-radius:4px}
   table.wbs td.num{text-align:center;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -105,8 +105,8 @@
   select.st-onhold{background:#fdeec2;color:#8a6d1a}
   select.st-done{background:#cfe2ff;color:#1c4e9c}
   select.st-awaiting{background:#dbe9fb;color:#3a5f8a}
-  /* フェーズ見出し(level1)＝タスク行と分けた帯表示 */
-  table.wbs tr.phase-row td{background:#1f3a5f;color:#fff;border-color:#1f3a5f}
+  /* フェーズ見出し(level1)＝ヘッダーの次に目立つ「薄い青帯」＋紺文字 */
+  table.wbs tr.phase-row td{background:#dce7f4;color:#1f3a5f;border-color:#c3d2e6}
   .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 
   .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}
@@ -542,13 +542,13 @@ function renderWbs(){
       const ptd=el("td"); ptd.colSpan=12;
       const pw=el("div"); pw.style.cssText="display:flex;align-items:center;gap:8px";
       const pn=el("span"); pn.textContent=wbsNumber(tasks,i); pn.style.cssText="opacity:.85;min-width:22px;font-weight:700";
-      const pin=el("textarea"); pin.value=t.title||""; pin.rows=1; pin.title=t.title||""; pin.style.cssText="flex:1;border:none;background:transparent;resize:none;font-family:inherit;font-size:14px;font-weight:700;color:#fff;padding:2px 4px"; pin.oninput=()=>{t.title=pin.value; persistTask(t);};
+      const pin=el("textarea"); pin.value=t.title||""; pin.rows=1; pin.title=t.title||""; pin.style.cssText="flex:1;border:none;background:transparent;resize:none;font-family:inherit;font-size:14px;font-weight:700;color:#1f3a5f;padding:2px 4px"; pin.oninput=()=>{t.title=pin.value; persistTask(t);};
       pw.appendChild(pn); pw.appendChild(pin);
-      const mkp=(lb,fn)=>{ const b=el("button","lvlbtn"); b.textContent=lb; b.onclick=fn; b.style.cssText="color:#fff;border-color:#ffffff55;background:transparent"; return b; };
+      const mkp=(lb,fn)=>{ const b=el("button","lvlbtn"); b.textContent=lb; b.onclick=fn; b.style.cssText="color:#1f3a5f;border-color:#1f3a5f55;background:transparent"; return b; };
       pw.appendChild(mkp("⇥",()=>{t.level=Math.min(3,(t.level||1)+1);renderWbs();persistTask(t);}));
       pw.appendChild(mkp("⇧",()=>moveTask(i,-1)));
       pw.appendChild(mkp("⇩",()=>moveTask(i,1)));
-      const pdel=el("button","rowdel"); pdel.textContent="✕"; pdel.title="削除"; pdel.style.color="#fff"; pdel.onclick=()=>deleteTask(i); pw.appendChild(pdel);
+      const pdel=el("button","rowdel"); pdel.textContent="✕"; pdel.title="削除"; pdel.style.color="#1f3a5f"; pdel.onclick=()=>deleteTask(i); pw.appendChild(pdel);
       ptd.appendChild(pw); ptr.appendChild(ptd); tb.appendChild(ptr); return;
     }
     const statusCls = locked ? " wbs-locked" : "";
