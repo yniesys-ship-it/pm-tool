@@ -437,6 +437,7 @@ async function loadAll(){
   else { await createProject("新規プロジェクト"); }
 }
 function pickInitialProject(ids){
+  try{ const qp=new URLSearchParams(location.search).get("project"); if(qp && store.projects[qp]) return qp; }catch(e){}  /* ハブからの?project=id埋め込みオープン */
   try{ const last=localStorage.getItem(lpKey()); if(last && store.projects[last]) return last; }catch(e){}
   let best=ids[0],bestN=-1;
   ids.forEach(id=>{ const n=store.projects[id].tasks.length; if(n>bestN){bestN=n;best=id;} }); // 空の新規プロジェクトに戻らない
