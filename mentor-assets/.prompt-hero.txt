@@ -1,0 +1,13 @@
+You have the image_generation tool. Generate ONE high-quality image and SAVE it as hero-bg.png (1600x420 px, PNG) in the current working directory.
+
+Subject: an abstract modern EdTech and SaaS hero banner BACKGROUND for a student-mentoring platform, brand V-career Mentor. It sits behind dark overlay text placed on the left.
+
+Brand palette (MUST follow): the brand color is TEAL / CYAN hex 00a8c0. Secondary teal hex 00a8a8. Bright cyan accent hex 18a8c0. The overall background is LIGHT and clean, near white hex f5fbfc on the left, flowing into soft teal-cyan tones on the right. This is a bright, airy, fresh look, NOT dark navy.
+
+Style: clean, professional, trustworthy, semi-flat with soft depth and gentle light, plenty of white space.
+Composition: the LEFT third stays lightest and calm and mostly empty for dark text overlay. The RIGHT side shows a subtle abstract motif of growth and guidance in teal-cyan tones: gentle upward paths and arcs, soft rounded geometric shapes, faint floating light particles, and a very subtle rising-steps or graduation-cap silhouette.
+
+IMPORTANT cleanliness rule: the background must be perfectly clean and even. Do NOT add any gray or dark smudge, blur blob, dirty shadow, ring, or arc-shaped haze anywhere (the previous version had an ugly gray smudge in the upper-left-center — remove it). Keep the left area a smooth clean light gradient with no stains.
+
+Absolutely NO text, NO letters, NO numbers, NO logos, NO watermark anywhere.
+Crisp, high quality, wide 1600 by 420 composition. Save the file as hero-bg.png now.

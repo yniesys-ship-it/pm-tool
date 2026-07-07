@@ -1,0 +1,16 @@
+You have the image_generation tool. Generate ONE high-quality DESKTOP WEB UI MOCKUP image and SAVE it as portal-mock.png (1600x1000 px, PNG) in the current working directory.
+
+This is a modern SaaS / EdTech dashboard for a student-mentoring platform called V-career Mentor (a mentor console: manage assigned students + learning resources).
+
+BRAND PALETTE (must follow strictly): primary brand color is TEAL / CYAN hex 00a8c0, secondary teal hex 00a8a8, bright cyan accent hex 18a8c0. Neutrals: near-white app background hex f4f8fa, white cards hex ffffff, soft cool-gray text hex 5b6b78, dark heading text hex 12333b. Light, airy, lots of white space. NOT dark navy.
+
+MODERN LOOK (very important): clean minimal 2025-style SaaS dashboard. Generous whitespace, large soft rounded corners (16-20px radius), very soft light shadows, thin 1px light-gray dividers, subtle glassmorphism on the hero banner, smooth teal gradients only as small accents. Modern geometric sans-serif typography, clear hierarchy. Flat friendly line icons (rounded stroke) in teal/gray. Feels premium, calm, trustworthy, like Linear / Notion / modern Duolingo-for-business.
+
+LAYOUT:
+- LEFT: a narrow vertical sidebar (about 220px) in white with rounded nav items; the active item highlighted with a soft teal pill. Small square brand logo mark at top (a simple abstract teal mark, no readable text). Nav icons: home, students, courses, calendar, messages, settings.
+- TOP of main area: a wide hero banner card with a smooth light-to-teal gradient and subtle abstract growth motif on the right (upward arcs, floating rounded cards, particles). A greeting and a small pill button sit on the left of the banner.
+- Below banner: a row of 4 KPI stat cards (big numbers, small labels, tiny teal icons).
+- Then a 2-column area: LEFT column = list of student/mentee cards, each with a round avatar, name, a thin teal progress bar, and small status tag chips. RIGHT column = course / learning-material cards in a small grid, each with a teal thumbnail, title, progress ring, and a short checklist.
+- A small "upcoming events" list with date chips.
+
+Fill with plausible Japanese-looking placeholder UI text is acceptable, but keep text minimal and secondary — the focus is the modern visual design and layout. High fidelity, crisp, realistic web UI screenshot look. Save as portal-mock.png now.
