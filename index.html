@@ -59,30 +59,6 @@
   main{padding:18px;max-width:1500px;margin:0 auto}
   .view{display:none}
   .view.active{display:block}
-  /* ===== ダッシュボード（サイドバー形式） ===== */
-  .dash-wrap{display:flex;gap:16px;align-items:flex-start}
-  .dash-side{flex:0 0 240px;position:sticky;top:110px}
-  .dash-main{flex:1;min-width:0}
-  .dash-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;margin-bottom:14px}
-  .dash-card h3{margin:0 0 10px;font-size:14px;color:#1f3a5f}
-  .dash-side .metric{display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:1px dashed #e6eaf0;font-size:13px}
-  .dash-side .metric b{font-size:16px}
-  .dash-side .catlink{display:flex;justify-content:space-between;font-size:12px;padding:5px 0;cursor:pointer;color:#334}
-  .dash-side .catlink:hover{color:#2f6df0}
-  .bigpct{font-size:34px;font-weight:800;color:#1f3a5f;line-height:1}
-  .pbar{height:8px;background:#eef1f5;border-radius:6px;overflow:hidden}
-  .pbar>span{display:block;height:100%;background:#3f7ad6}
-  .alert-hi{background:#fdeaea;border-left:4px solid #c0392b}
-  .alert-mid{background:#fff7e0;border-left:4px solid #d3a017}
-  .dash-row{display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:12px;border-bottom:1px solid #f0f2f5}
-  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
-  .cal .day{border:1px solid #e6eaf0;border-radius:6px;min-height:64px;padding:4px}
-  .cal .day .dnum{color:#8a94a3;font-weight:700;font-size:10px}
-  .cal .day.today{border-color:#3f7ad6;background:#f0f6ff}
-  .cal .ev{margin-top:2px;padding:1px 3px;border-radius:3px;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .cal .ev.s{background:#e3f0d6}
-  .cal .ev.e{background:#fde2e2}
-  @media(max-width:900px){ .dash-wrap{flex-direction:column} .dash-side{position:static;flex:auto;width:100%} }
 
   .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:16px}
   .card h2{margin:0;padding:14px 18px;font-size:14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
@@ -229,8 +205,7 @@
     <button class="btn" id="logoutBtn">ログアウト</button>
   </div>
   <div class="tabs">
-    <button class="tab active" data-view="dashboard">📈 ダッシュボード</button>
-    <button class="tab" data-view="sow">📄 SOW（作業範囲記述書）</button>
+    <button class="tab active" data-view="sow">📄 SOW（作業範囲記述書）</button>
     <button class="tab" data-view="wbs">🗂 WBS（作業分解）</button>
     <button class="tab" data-view="gantt">📊 ガントチャート</button>
   </div>
@@ -239,14 +214,7 @@
 <main>
   <div class="printtitle" id="printTitle"></div>
 
-  <section class="view active" id="view-dashboard">
-    <div class="dash-wrap">
-      <aside class="dash-side" id="dashSide"></aside>
-      <div class="dash-main" id="dashMain"></div>
-    </div>
-  </section>
-
-  <section class="view" id="view-sow">
+  <section class="view active" id="view-sow">
     <div class="card"><h2>基本情報 <span class="hint">案件の概要</span></h2><div class="body">
       <div class="grid3">
         <div class="field"><label>プロジェクト名</label><input id="sow_name" placeholder="例：◯◯社 インバウンドサイト制作"></div>
@@ -496,7 +464,7 @@ document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
   document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
   t.classList.add("active"); $("#view-"+t.dataset.view).classList.add("active");
-  if(t.dataset.view==="gantt")renderGantt(); if(t.dataset.view==="wbs")renderKpis(); if(t.dataset.view==="dashboard")renderDashboard();
+  if(t.dataset.view==="gantt")renderGantt(); if(t.dataset.view==="wbs")renderKpis();
 });
 
 /* ===================== SOW ===================== */
@@ -711,76 +679,6 @@ $("#wbsSortOrder").onchange=e=>{ wbsSortOrder=e.target.value; renderWbs(); };
 $("#wbsFilterStatus").onchange=e=>{ wbsFilterStatus=e.target.value; renderWbs(); };
 
 /* ===================== KPI ===================== */
-/* ===================== ダッシュボード ===================== */
-const DASH_CATS=[
-  {key:"会場・配信",re:/会場|配信|レイアウト|下見|本予約|架電|利用許可|利用契約/},
-  {key:"法務・届出",re:/法務|届出|職安|反社|個人情報|同意|消防|保険|契約|規約|適法|労働局|チェックリスト|的確表示|名簿|肖像|派遣/},
-  {key:"営業・出展",re:/営業|商談|アプローチ|ターゲット|出展社|出展企業|申込|請求|入金|確定出展|提携|運営案内/},
-  {key:"広報・集客",re:/広報|募集|集客|チャネル|リマインド|登録フォーム|モニタリング|見込み|ポータル/},
-  {key:"収支・料金",re:/収支|損益|出展プラン|出展料|成果報酬|予算|精算|支払|発注/},
-  {key:"運営・当日",re:/運営|当日|設営|受付|誘導|ブース|面談|登壇|撤収|リハ|備品|BCP|緊急|台本|進行|マニュアル|説明会|予備日/},
-  {key:"事後・振り返り",re:/実績|集計|アンケート|御礼|報告|振り返り|次回/}
-];
-function dhCatOf(title){ for(const c of DASH_CATS){ if(c.re.test(title||"")) return c.key; } return "その他"; }
-function dhEsc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
-function dhFmt(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
-function dhFirstUrl(v){ if(!v)return""; const m=String(v).match(/https?:\/\/[^\s|｜]+/); return m?m[0]:""; }
-function dhLinks(t){ let h=""; const g=dhFirstUrl(t.task_guide); const d=dhFirstUrl(t.deliverable); if(g)h+=' <a href="'+g+'" target="_blank" rel="noopener" style="font-size:11px;margin-left:6px">ガイド</a>'; if(d)h+=' <a href="'+d+'" target="_blank" rel="noopener" style="font-size:11px;margin-left:4px">成果物</a>'; return h; }
-function dhWeekCal(L2,t0){
-  const start=addDays(t0,-t0.getDay()); const wd=["日","月","火","水","木","金","土"]; let h='<div class="cal">';
-  for(let i=0;i<7;i++){ const d=addDays(start,i); const iso=dhFmt(d);
-    const starts=L2.filter(t=>t.start===iso), ends=L2.filter(t=>t.end===iso);
-    h+='<div class="day'+(d.getTime()===t0.getTime()?" today":"")+'"><div class="dnum">'+wd[i]+" "+(d.getMonth()+1)+"/"+d.getDate()+"</div>";
-    starts.slice(0,3).forEach(t=>{ h+='<div class="ev s" title="'+dhEsc(t.title)+'">▶'+dhEsc((t.title||"").slice(0,8))+"</div>"; });
-    ends.slice(0,3).forEach(t=>{ h+='<div class="ev e" title="'+dhEsc(t.title)+'">■'+dhEsc((t.title||"").slice(0,8))+"</div>"; });
-    h+="</div>";
-  }
-  h+='</div><div style="font-size:10px;color:#8a94a3;margin-top:4px">▶着手 ／ ■締切</div>'; return h;
-}
-function renderDashboard(){
-  const side=$("#dashSide"), main=$("#dashMain"); if(!side||!main||!store.current) return;
-  const tasks=cur().tasks||[];
-  const L2=tasks.filter(t=>(t.level||1)===2);
-  const total=L2.length, done=L2.filter(t=>t.status==="done").length;
-  const avg=total?Math.round(L2.reduce((s,t)=>s+(+t.progress||0),0)/total):0;
-  const t0=todayMid();
-  const late=L2.filter(t=>{const e=parseDate(t.end);return e&&e<t0&&t.status!=="done";});
-  const hold=L2.filter(t=>t.status==="blocked");
-  const numMap=wbsNumMap(tasks); const pmSee=isPM()&&pmOverride;
-  const actionable=L2.filter(t=>t.status!=="done"&&!(!pmSee&&taskLocked(t,numMap)));
-  const gates=tasks.filter(t=>/◆|ゲート/.test(t.title||"")&&t.status!=="done").map(t=>({t,d:parseDate(t.end)})).filter(x=>x.d).sort((a,b)=>a.d-b.d);
-  const nextGate=gates[0]; const daysTo=nextGate?Math.ceil((nextGate.d-t0)/86400000):null;
-  const cats={}; L2.forEach(t=>{ const c=dhCatOf(t.title); (cats[c]=cats[c]||[]).push(t); });
-  let sh='<div class="dash-card"><div class="bigpct">'+avg+'%</div><div style="font-size:11px;color:#6b7686">全体進捗（平均）</div>';
-  sh+='<div class="metric"><span>完了</span><b>'+done+" / "+total+'</b></div>';
-  sh+='<div class="metric"><span>延滞</span><b style="color:#c0392b">'+late.length+'</b></div>';
-  sh+='<div class="metric"><span>要議論(保留)</span><b style="color:#d3a017">'+hold.length+'</b></div>';
-  sh+='<div class="metric"><span>着手可能</span><b>'+actionable.length+'</b></div>';
-  sh+='<div class="metric"><span>次ゲートまで</span><b>'+(daysTo!=null?daysTo+"日":"-")+'</b></div></div>';
-  sh+='<div class="dash-card"><h3>カテゴリ</h3>';
-  Object.keys(cats).forEach(c=>{ const arr=cats[c]; const a=Math.round(arr.reduce((s,t)=>s+(+t.progress||0),0)/arr.length); sh+='<div class="catlink" onclick="var e=document.getElementById(\'dcat-'+encodeURIComponent(c)+'\');if(e)e.scrollIntoView({behavior:\'smooth\'})"><span>'+dhEsc(c)+'</span><span>'+a+"% ("+arr.length+")</span></div>"; });
-  sh+="</div>"; side.innerHTML=sh;
-  let mh='<div class="dash-card '+((late.length||hold.length)?"alert-hi":"")+'"><h3>⚠ 要対応（全員で共有）</h3>';
-  if(hold.length){ mh+='<div style="font-size:12px;font-weight:700;color:#8a6d1a;margin:4px 0">社内で議論すべき壁（保留 '+hold.length+"）</div>"; hold.forEach(t=>{ mh+='<div class="dash-row alert-mid" style="padding-left:6px">'+dhEsc(t.title)+"</div>"; }); }
-  if(late.length){ mh+='<div style="font-size:12px;font-weight:700;color:#c0392b;margin:6px 0 4px">延滞（'+late.length+"）</div>"; late.slice(0,8).forEach(t=>{ mh+='<div class="dash-row alert-hi" style="padding-left:6px">'+dhEsc(t.end||"")+"　"+dhEsc(t.title)+"</div>"; }); }
-  if(!late.length&&!hold.length) mh+='<div style="font-size:12px;color:#6b7686">要対応なし 🎉</div>';
-  mh+="</div>";
-  mh+='<div class="dash-card"><h3>直近のタスク（着手可能）</h3>';
-  actionable.slice(0,10).forEach(t=>{ mh+='<div class="dash-row"><span style="flex:1">'+dhEsc(t.title)+'</span><span style="color:#6b7686">'+(t.progress||0)+"%</span>"+dhLinks(t)+"</div>"; });
-  if(!actionable.length) mh+='<div style="font-size:12px;color:#6b7686">なし</div>';
-  mh+="</div>";
-  mh+='<div class="dash-card"><h3>今週のタイムライン</h3>'+dhWeekCal(L2,t0)+"</div>";
-  mh+='<div class="dash-card"><h3>カテゴリ別まとめ（関連ガイド・成果物）</h3>';
-  Object.keys(cats).forEach(c=>{ const arr=cats[c]; const a=Math.round(arr.reduce((s,t)=>s+(+t.progress||0),0)/arr.length);
-    mh+='<div id="dcat-'+encodeURIComponent(c)+'" style="margin:12px 0 4px"><b>'+dhEsc(c)+'</b> <span style="color:#6b7686;font-size:12px">'+a+"% ("+arr.length+')</span><div class="pbar" style="margin:4px 0"><span style="width:'+a+'%"></span></div></div>';
-    arr.forEach(t=>{ mh+='<div class="dash-row"><span style="flex:1">'+dhEsc(t.title)+'</span><span style="color:#6b7686">'+(t.progress||0)+"%</span>"+dhLinks(t)+"</div>"; });
-  });
-  mh+="</div>";
-  const bs={notstarted:0,inprogress:0,done:0,awaiting:0,blocked:0}; L2.forEach(t=>{ bs[t.status||"notstarted"]=(bs[t.status||"notstarted"]||0)+1; });
-  mh+='<div class="dash-card"><h3>ステータス内訳 ＆ 次のゲート</h3><div style="font-size:12px">未着手 '+bs.notstarted+" ／ 進行中 "+bs.inprogress+" ／ 完了 "+bs.done+" ／ 完了待ち "+bs.awaiting+" ／ 保留 "+bs.blocked+" ／ 延滞 "+late.length+"</div>";
-  if(nextGate) mh+='<div style="margin-top:8px;font-size:12px">次のゲート：<b>'+dhEsc(nextGate.t.title)+"</b>（"+dhEsc(nextGate.t.end||"")+"）</div>";
-  mh+="</div>"; main.innerHTML=mh;
-}
 function renderKpis(){
   const tasks=cur().tasks;
   const leaf=tasks.filter((t,i)=>!((i+1<tasks.length)&&tasks[i+1].level>t.level));
@@ -860,7 +758,7 @@ function subscribeRealtime(){
     .subscribe(status=>{ if(status==="SUBSCRIBED")setSync("on","同期済み"); });
 }
 function scheduleRender(){ if(editingActive){ pendingRender=true; return; } renderActive(); }
-function renderActive(){ renderProjSelect(); if($("#view-sow").classList.contains("active"))renderSow(); renderWbs(); if($("#view-gantt").classList.contains("active"))renderGantt(); renderDashboard(); }
+function renderActive(){ renderProjSelect(); if($("#view-sow").classList.contains("active"))renderSow(); renderWbs(); if($("#view-gantt").classList.contains("active"))renderGantt(); }
 function onTaskChange(payload){
   const ev=payload.eventType, n=payload.new, o=payload.old;
   if(ev==="DELETE"){ const p=store.projects[o.project_id]; if(p){ const k=p.tasks.findIndex(x=>x.id===o.id); if(k>=0)p.tasks.splice(k,1);} }
@@ -940,7 +838,7 @@ function runBriefing(){
 }
 
 /* ===================== 初期描画 ===================== */
-function renderAll(){ if(!store.current)return; renderProjSelect(); renderSow(); renderWbs(); renderGantt(); renderDashboard(); }
+function renderAll(){ if(!store.current)return; renderProjSelect(); renderSow(); renderWbs(); renderGantt(); }
 
 /* ===================== 起動 ===================== */
 (async function init(){
