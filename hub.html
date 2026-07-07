@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SYS 事業ハブ｜進行中プロジェクト</title>
+<style>
+  :root{--navy:#1f3a5f;--line:#e6eaf0;--muted:#6b7686;--bg:#f5f6f8;--panel:#fff}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Yu Gothic","Meiryo",sans-serif;color:#1f2733;background:var(--bg)}
+  header{position:sticky;top:0;z-index:10;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:10px 18px}
+  header .brand{font-weight:800;color:var(--navy);font-size:16px}
+  header .who{margin-left:auto;font-size:12px;color:var(--muted)}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer}
+  .wrap{display:flex;gap:16px;align-items:flex-start;padding:16px 18px}
+  .side{flex:0 0 220px;position:sticky;top:70px}
+  .main{flex:1;min-width:0}
+  .card-side{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px}
+  .side .metric{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13px}
+  .side .metric b{font-size:16px}
+  .side .nav{font-size:13px;padding:6px 0;cursor:pointer;color:#334}
+  .side .nav:hover{color:#2f6df0}
+  h2.sec{font-size:14px;color:var(--navy);margin:18px 0 8px;border-bottom:2px solid var(--navy);padding-bottom:4px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+  .pcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.05);cursor:pointer;transition:.12s}
+  .pcard:hover{box-shadow:0 4px 12px rgba(31,58,95,.15);transform:translateY(-1px)}
+  .pcard .pname{font-weight:700;font-size:14px;margin-bottom:8px;color:var(--navy)}
+  .pcard .tag{display:inline-block;font-size:10px;padding:1px 7px;border-radius:9px;background:#eef2f8;color:var(--navy);margin-bottom:6px}
+  .pcard .tag.ope{background:#eef7ea;color:#2f6b2b}
+  .pbar{height:8px;background:#eef1f5;border-radius:6px;overflow:hidden;margin:6px 0}
+  .pbar>span{display:block;height:100%;background:#3f7ad6}
+  .pcard .row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:4px}
+  .pcard .alert{color:#c0392b;font-weight:700}
+  .pcard .hold{color:#d3a017;font-weight:700}
+  .embed{display:none;position:fixed;inset:0;z-index:20;background:var(--bg);flex-direction:column}
+  .embed .bar{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--navy);color:#fff}
+  .embed .bar b{font-size:14px}
+  .embed iframe{flex:1;border:0;width:100%}
+  #login{position:fixed;inset:0;background:#f5f6f8;display:flex;align-items:center;justify-content:center;z-index:30}
+  #login .box{background:#fff;border:1px solid var(--line);border-radius:12px;padding:28px;width:320px;box-shadow:0 6px 24px rgba(0,0,0,.08)}
+  #login input{width:100%;padding:9px 10px;margin:6px 0;border:1px solid var(--line);border-radius:8px;font-size:14px}
+  #login .box h1{font-size:16px;color:var(--navy);margin:0 0 12px}
+  .note{font-size:11px;color:var(--muted);margin-top:8px}
+  @media(max-width:820px){.wrap{flex-direction:column}.side{position:static;width:100%;flex:auto}}
+</style>
+</head>
+<body>
+<div id="login"><div class="box">
+  <h1>SYS 事業ハブ ログイン</h1>
+  <input id="email" type="email" placeholder="メールアドレス" autocomplete="username">
+  <input id="pw" type="password" placeholder="パスワード" autocomplete="current-password">
+  <button class="btn" id="loginBtn" style="width:100%;background:var(--navy);color:#fff;border:0;margin-top:6px">ログイン</button>
+  <div class="note" id="loginMsg"></div>
+</div></div>
+
+<header>
+  <span class="brand">📊 SYS 事業ハブ</span>
+  <span style="font-size:12px;color:#6b7686">進行中プロジェクト</span>
+  <span class="who" id="who"></span>
+  <button class="btn" id="reload">更新</button>
+  <button class="btn" id="logout">ログアウト</button>
+</header>
+
+<div class="wrap">
+  <aside class="side">
+    <div class="card-side" id="summary"></div>
+    <div class="card-side" id="navbox"></div>
+    <div class="note">※権限（役員/社員）と機密マスクは次段で追加予定。</div>
+  </aside>
+  <div class="main" id="main"></div>
+</div>
+
+<div class="embed" id="embed">
+  <div class="bar"><button class="btn" id="back" style="background:#fff;color:#1f3a5f">← 一覧に戻る</button><b id="embTitle"></b></div>
+  <iframe id="frame" title="PMツール"></iframe>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL="https://fwpkggpsonarstpeecwz.supabase.co";
+const SUPABASE_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3cGtnZ3Bzb25hcnN0cGVlY3d6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4ODQzNzcsImV4cCI6MjA5NzQ2MDM3N30.4bb28WJ8i0IBQuZhPr91bmB91UOGnoMkrYe9588vUOM";
+const db=supabase.createClient(SUPABASE_URL,SUPABASE_ANON);
+const $=s=>document.querySelector(s);
+function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function bizOf(name){ if(/通信/.test(name))return "通信事業"; if(/V-?career|就活|関西|メンター|キックオフ/i.test(name))return "V-career"; return "その他"; }
+function kindOf(name){ return /継続業務|社内タスク/.test(name)?"社内タスク（継続業務）":"プロジェクト"; }
+
+async function boot(){
+  const {data}=await db.auth.getSession();
+  if(data && data.session){ $("#login").style.display="none"; startApp(data.session); }
+  else { $("#login").style.display="flex"; }
+}
+$("#loginBtn").onclick=async()=>{
+  $("#loginMsg").textContent="認証中…";
+  const {data,error}=await db.auth.signInWithPassword({email:$("#email").value.trim(),password:$("#pw").value});
+  if(error){ $("#loginMsg").textContent="失敗："+error.message; return; }
+  $("#login").style.display="none"; startApp(data.session);
+};
+$("#logout").onclick=async()=>{ await db.auth.signOut(); location.reload(); };
+$("#reload").onclick=()=>load();
+$("#back").onclick=()=>{ $("#embed").style.display="none"; $("#frame").src="about:blank"; };
+
+async function startApp(session){
+  $("#who").textContent=session.user.email;
+  await load();
+}
+
+async function load(){
+  const {data:pr}=await db.from("projects").select("id,name,updated_at");
+  const {data:tr}=await db.from("tasks").select("id,project_id,level,status,progress,end_date,title");
+  const byp={}; (pr||[]).forEach(p=>byp[p.id]={p,tasks:[]});
+  (tr||[]).forEach(t=>{ if(byp[t.project_id]) byp[t.project_id].tasks.push(t); });
+  const today=new Date(); today.setHours(0,0,0,0);
+  const cards=[]; let totLate=0,totHold=0;
+  Object.values(byp).forEach(({p,tasks})=>{
+    const L2=tasks.filter(t=>(t.level||1)===2);
+    const total=L2.length, done=L2.filter(t=>t.status==="done").length;
+    const avg=total?Math.round(L2.reduce((s,t)=>s+(+t.progress||0),0)/total):0;
+    const late=L2.filter(t=>t.end_date&&new Date(t.end_date)<today&&t.status!=="done").length;
+    const hold=L2.filter(t=>t.status==="blocked").length;
+    const gates=tasks.filter(t=>/◆|ゲート/.test(t.title||"")&&t.status!=="done"&&t.end_date).map(t=>({t,d:new Date(t.end_date)})).sort((a,b)=>a.d-b.d);
+    const ng=gates[0];
+    totLate+=late; totHold+=hold;
+    cards.push({id:p.id,name:p.name||"(無題)",biz:bizOf(p.name||""),kind:kindOf(p.name||""),total,done,avg,late,hold,ng});
+  });
+  // サマリ
+  $("#summary").innerHTML='<div style="font-size:11px;color:#6b7686">進行中プロジェクト</div><div style="font-size:30px;font-weight:800;color:#1f3a5f">'+cards.length+'</div>'+
+    '<div class="metric"><span>延滞（合計）</span><b style="color:#c0392b">'+totLate+'</b></div>'+
+    '<div class="metric"><span>要議論・保留</span><b style="color:#d3a017">'+totHold+'</b></div>';
+  // 事業グループ
+  const groups={}; cards.forEach(c=>{ (groups[c.biz]=groups[c.biz]||[]).push(c); });
+  const order=["V-career","通信事業","その他"];
+  let nav=""; let mh="";
+  order.filter(g=>groups[g]).concat(Object.keys(groups).filter(g=>!order.includes(g))).forEach(g=>{
+    if(!groups[g])return;
+    nav+='<div class="nav" onclick="document.getElementById(\'g-'+encodeURIComponent(g)+'\').scrollIntoView({behavior:\'smooth\'})">'+esc(g)+' ('+groups[g].length+')</div>';
+    mh+='<h2 class="sec" id="g-'+encodeURIComponent(g)+'">'+esc(g)+'</h2><div class="grid">';
+    groups[g].forEach(c=>{
+      mh+='<div class="pcard" onclick="openProj(\''+c.id+'\',\''+esc(c.name).replace(/\x27/g,"")+'\')">'+
+        '<span class="tag'+(c.kind.indexOf("継続")>=0?" ope":"")+'">'+esc(c.kind)+'</span>'+
+        '<div class="pname">'+esc(c.name)+'</div>'+
+        '<div class="pbar"><span style="width:'+c.avg+'%"></span></div>'+
+        '<div class="row"><span>進捗 '+c.avg+'%</span><span>完了 '+c.done+'/'+c.total+'</span></div>'+
+        '<div class="row">'+(c.late?'<span class="alert">延滞 '+c.late+'</span>':'<span>延滞 0</span>')+(c.hold?'<span class="hold">保留 '+c.hold+'</span>':'<span>保留 0</span>')+'</div>'+
+        '<div class="row"><span>次ゲート</span><span>'+(c.ng?esc(c.ng.t.end_date):'-')+'</span></div>'+
+      '</div>';
+    });
+    mh+='</div>';
+  });
+  $("#navbox").innerHTML='<div style="font-size:12px;font-weight:700;color:#1f3a5f;margin-bottom:6px">事業</div>'+nav;
+  $("#main").innerHTML=mh||'<div style="color:#6b7686">プロジェクトがありません</div>';
+}
+
+function openProj(id,name){
+  $("#embTitle").textContent=name;
+  $("#frame").src="index.html?project="+encodeURIComponent(id);
+  $("#embed").style.display="flex";
+}
+window.openProj=openProj;
+boot();
+</script>
+</body>
+</html>
