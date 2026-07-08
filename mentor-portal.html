@@ -161,7 +161,9 @@
 <script>
 const SUPABASE_URL="https://wmgwjpcvndiuyvqfrpdj.supabase.co";
 const SUPABASE_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndtZ3dqcGN2bmRpdXl2cWZycGRqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0OTU1MDAsImV4cCI6MjA5OTA3MTUwMH0.7d6twzF0dCMmOmAMVz43CALyFn7HsT-bo-CcPBx30F0";
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+  auth:{ flowType:'pkce', detectSessionInUrl:false, persistSession:true, autoRefreshToken:true, storageKey:'vcareer-mentor-auth' }
+});
 
 const $=s=>document.querySelector(s);
 const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
@@ -174,13 +176,31 @@ $('#modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal();}
 let ME=null; // {id,email,full_name,role}
 
 /* ---------- 認証 ---------- */
+const CLEAN_URL = location.origin + location.pathname;  // ?code や #token を含めない
 $('#googleBtn').addEventListener('click',async()=>{
-  const {error}=await db.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.href.split('#')[0]}});
+  $('#loginNote').textContent='Googleへ移動中…';
+  const {error}=await db.auth.signInWithOAuth({provider:'google',options:{redirectTo:CLEAN_URL}});
   if(error)$('#loginNote').textContent='ログインエラー: '+error.message;
 });
 $('#logoutBtn').addEventListener('click',async()=>{await db.auth.signOut();location.reload();});
 
 async function boot(){
+  // --- OAuthコールバック処理（detectSessionInUrl=false のため明示的に）---
+  const u=new URL(location.href);
+  const errp=u.searchParams.get('error')||u.searchParams.get('error_code');
+  if(errp){
+    $('#login').classList.remove('hidden');
+    $('#loginNote').textContent='ログインエラー: '+errp+' / '+(u.searchParams.get('error_description')||'');
+    history.replaceState({}, '', CLEAN_URL);
+    return;
+  }
+  if(u.searchParams.get('code')){
+    try{
+      const {error}=await db.auth.exchangeCodeForSession(location.href);
+      if(error) $('#loginNote').textContent='認証交換エラー: '+error.message;
+    }catch(e){ $('#loginNote').textContent='認証交換例外: '+(e&&e.message||e); }
+    history.replaceState({}, '', CLEAN_URL);   // URLからcodeを除去（ループ防止）
+  }
   const {data:{session}}=await db.auth.getSession();
   if(!session){ $('#login').classList.remove('hidden'); return; }
   // プロフィール取得（トリガで作成済みのはず。無ければ少し待って再取得）
