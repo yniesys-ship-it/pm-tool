@@ -162,7 +162,7 @@
 const SUPABASE_URL="https://wmgwjpcvndiuyvqfrpdj.supabase.co";
 const SUPABASE_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndtZ3dqcGN2bmRpdXl2cWZycGRqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0OTU1MDAsImV4cCI6MjA5OTA3MTUwMH0.7d6twzF0dCMmOmAMVz43CALyFn7HsT-bo-CcPBx30F0";
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
-  auth:{ flowType:'pkce', detectSessionInUrl:false, persistSession:true, autoRefreshToken:true, storageKey:'vcareer-mentor-auth' }
+  auth:{ flowType:'implicit', detectSessionInUrl:true, persistSession:true, autoRefreshToken:true, storageKey:'vcareer-mentor-auth' }
 });
 
 const $=s=>document.querySelector(s);
@@ -185,23 +185,19 @@ $('#googleBtn').addEventListener('click',async()=>{
 $('#logoutBtn').addEventListener('click',async()=>{await db.auth.signOut();location.reload();});
 
 async function boot(){
-  // --- OAuthコールバック処理（detectSessionInUrl=false のため明示的に）---
+  // --- OAuthコールバックのエラーをsearch/hash両方から拾う ---
   const u=new URL(location.href);
-  const errp=u.searchParams.get('error')||u.searchParams.get('error_code');
+  const hp=new URLSearchParams((location.hash||'').replace(/^#/,''));
+  const errp=u.searchParams.get('error')||u.searchParams.get('error_code')||hp.get('error')||hp.get('error_code');
   if(errp){
     $('#login').classList.remove('hidden');
-    $('#loginNote').textContent='ログインエラー: '+errp+' / '+(u.searchParams.get('error_description')||'');
+    $('#loginNote').textContent='ログインエラー: '+errp+' / '+decodeURIComponent(u.searchParams.get('error_description')||hp.get('error_description')||'');
     history.replaceState({}, '', CLEAN_URL);
     return;
   }
-  if(u.searchParams.get('code')){
-    try{
-      const {error}=await db.auth.exchangeCodeForSession(location.href);
-      if(error) $('#loginNote').textContent='認証交換エラー: '+error.message;
-    }catch(e){ $('#loginNote').textContent='認証交換例外: '+(e&&e.message||e); }
-    history.replaceState({}, '', CLEAN_URL);   // URLからcodeを除去（ループ防止）
-  }
+  // detectSessionInUrl:true が #access_token を自動処理する。getSessionはその完了後に解決
   const {data:{session}}=await db.auth.getSession();
+  if(location.hash || u.searchParams.get('code')) history.replaceState({}, '', CLEAN_URL); // URL浄化(ループ防止)
   if(!session){ $('#login').classList.remove('hidden'); return; }
   // プロフィール取得（トリガで作成済みのはず。無ければ少し待って再取得）
   let prof=await getProfile(session.user.id);
