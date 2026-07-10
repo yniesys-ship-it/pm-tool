@@ -208,6 +208,7 @@
     <button class="tab active" data-view="sow">📄 SOW（作業範囲記述書）</button>
     <button class="tab" data-view="wbs">🗂 WBS（作業分解）</button>
     <button class="tab" data-view="gantt">📊 ガントチャート</button>
+    <button class="tab" data-view="board">📢 掲示板</button>
   </div>
 </header>
 
@@ -302,6 +303,23 @@
         <span><i class="sw" style="background:var(--bar-late)"></i>遅延</span>
         <span><i class="sw" style="background:var(--bar-late);width:3px"></i>本日</span>
       </div>
+    </div></div>
+  </section>
+
+  <section class="view" id="view-board">
+    <div class="card"><h2>📢 掲示板 <span class="hint">連絡事項・ご意見をメンバーで共有</span></h2><div class="body">
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px;padding:14px;border:1px solid var(--line);border-radius:10px;background:#fafcff">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input id="boardName" placeholder="お名前" style="width:150px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px">
+          <select id="boardKind" style="padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px">
+            <option value="意見">💡 ご意見</option>
+            <option value="連絡">📣 連絡事項</option>
+          </select>
+        </div>
+        <textarea id="boardBody" placeholder="連絡事項やご意見を書いて投稿…（足りていないタスクの提案などもここへ）" rows="3" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13px;resize:vertical;font-family:inherit"></textarea>
+        <div style="display:flex;justify-content:flex-end"><button class="btn" id="boardPostBtn" style="background:#1f5fae;color:#fff;border-color:#1f5fae">投稿する</button></div>
+      </div>
+      <div id="boardList"><p style="color:var(--muted);font-size:13px">読み込み中…</p></div>
     </div></div>
   </section>
 </main>
@@ -466,7 +484,37 @@ document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
   document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
   t.classList.add("active"); $("#view-"+t.dataset.view).classList.add("active");
   if(t.dataset.view==="gantt")renderGantt(); if(t.dataset.view==="wbs")renderKpis();
+  if(t.dataset.view==="board")renderBoard();
 });
+
+/* ===================== 掲示板（連絡事項・ご意見ボード） ===================== */
+async function renderBoard(){
+  const box=$("#boardList"); if(!box)return;
+  const nm=$("#boardName"); if(nm && !nm.value) nm.value=localStorage.getItem("pm_board_name")||"";
+  const {data,error}=await db.from("board_messages").select("*").eq("project_id",store.current).order("created_at",{ascending:false});
+  if(error){ box.innerHTML=`<p style="color:#c0392b;font-size:13px">読み込みエラー: ${esc(error.message)}<br><span style="color:var(--muted)">（board_messages テーブル未作成の可能性。案内したSQLを実行してください）</span></p>`; return; }
+  if(!data||!data.length){ box.innerHTML=`<p style="color:var(--muted);font-size:13px">まだ投稿がありません。最初のメッセージを投稿しましょう。</p>`; return; }
+  box.innerHTML=data.map(m=>{
+    const badge = m.kind==="連絡"
+      ? '<span style="background:#fde8cf;color:#a9611a;border-radius:6px;padding:1px 8px;font-size:11px;font-weight:700">📣 連絡事項</span>'
+      : '<span style="background:#e2f0ff;color:#1f5fae;border-radius:6px;padding:1px 8px;font-size:11px;font-weight:700">💡 ご意見</span>';
+    const dt=new Date(m.created_at).toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"});
+    return `<div style="border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:#fff">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">${badge}<b style="font-size:13px">${esc(m.author||"匿名")}</b><span style="color:var(--muted);font-size:11px">${dt}</span><button data-del="${m.id}" style="margin-left:auto;border:none;background:none;color:#c9b8b8;cursor:pointer;font-size:14px" title="削除">✕</button></div>
+      <div style="font-size:13.5px;white-space:pre-wrap;line-height:1.55">${esc(m.body)}</div>
+    </div>`;
+  }).join("");
+  box.querySelectorAll("button[data-del]").forEach(b=>b.onclick=async()=>{ if(!confirm("この投稿を削除しますか？"))return; await guard(db.from("board_messages").delete().eq("id",b.dataset.del),"投稿の削除"); renderBoard(); });
+}
+async function postBoard(){
+  const name=($("#boardName").value||"").trim(); const body=($("#boardBody").value||"").trim();
+  if(!body){ $("#boardBody").focus(); return; }
+  localStorage.setItem("pm_board_name",name);
+  const r=await guard(db.from("board_messages").insert({project_id:store.current,author:name||"匿名",kind:$("#boardKind").value,body}),"投稿");
+  if(r && r.error) return;
+  $("#boardBody").value=""; renderBoard();
+}
+if($("#boardPostBtn")) $("#boardPostBtn").onclick=postBoard;
 
 /* ===================== SOW ===================== */
 function renderSow(){ const s=cur().sow||{}; SOW_FIELDS.forEach(f=>{ const e=$("#sow_"+f); if(e)e.value=s[f]||""; }); updateSowMeta(); }
@@ -559,7 +607,7 @@ function renderWbs(){
     const drag=el("span","rowdrag"); drag.textContent="⋮⋮";
     const inName=el("textarea"); inName.value=t.title||""; inName.placeholder="タスク名"; inName.rows=2; inName.title=t.title||""; inName.style.cssText="width:100%;border:none;background:transparent;resize:vertical;font-family:inherit;font-size:13px;line-height:1.45;min-height:34px;padding:6px 8px;color:var(--ink)"; inName.oninput=()=>{t.title=inName.value; inName.title=inName.value; persistTask(t);};
     wrap.appendChild(drag); wrap.appendChild(inName); tdTask.appendChild(wrap); tr.appendChild(tdTask);
-    tr.appendChild(cellInput(t,"assignee","担当"));
+    const asgCell=cellInput(t,"assignee","担当"); if((t.assignee||"").trim()==="全員"){ const _inp=asgCell.querySelector("input"); if(_inp)_inp.title=assigneeLabel("全員",tasks); } tr.appendChild(asgCell);
     tr.appendChild(cellDate(t,"start")); const _endCell=cellDate(t,"end"); if(overdue) _endCell.classList.add("overdue-date"); tr.appendChild(_endCell);
     const tdDur=el("td","num"); tdDur.textContent=durationOf(t); tr.appendChild(tdDur);
     const tdP=el("td"); const pc=el("div","prog-cell");
@@ -598,14 +646,24 @@ function renderWbs(){
   });
   renderKpis();
 }
+/* メンバー一覧＝担当欄の実在名（「全員」と空は除く）。表示専用。 */
+function allMembers(tasks){
+  return [...new Set((tasks||[]).map(t=>(t.assignee||"").trim()).filter(n=>n&&n!=="全員"))].sort((a,b)=>a.localeCompare(b,"ja"));
+}
+/* 担当表示：値が「全員」なら全メンバー名を展開（それ以外はそのまま）。 */
+function assigneeLabel(val,tasks){
+  val=(val||"").trim();
+  if(val==="全員"){ const m=allMembers(tasks); return m.length? "全員（"+m.join("・")+"）" : "全員"; }
+  return val;
+}
 /* 担当者フィルタの選択肢を現在のタスクから動的生成（重複なし）。表示専用、DB非変更。 */
 function refreshWbsFilterOptions(tasks){
   const sel=$("#wbsFilterAssignee"); if(!sel)return;
   const names=[...new Set((tasks||[]).map(t=>(t.assignee||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));
   if(wbsFilterAssignee && !names.includes(wbsFilterAssignee)) wbsFilterAssignee="";  // 該当者が消えたら全員に戻す
   sel.innerHTML="";
-  const all=el("option"); all.value=""; all.textContent="全員"; sel.appendChild(all);
-  names.forEach(n=>{ const o=el("option"); o.value=n; o.textContent=n; sel.appendChild(o); });
+  const all=el("option"); all.value=""; all.textContent="全員（フィルタ解除）"; sel.appendChild(all);
+  names.forEach(n=>{ const o=el("option"); o.value=n; o.textContent=(n==="全員")?assigneeLabel(n,tasks):n; sel.appendChild(o); });
   sel.value=wbsFilterAssignee;
 }
 function mkBtn(label,fn){ const b=el("button","lvlbtn"); b.textContent=label; b.onclick=fn; return b; }
@@ -714,7 +772,7 @@ function renderGantt(){
     const row=el("div","g-row"); row.style.gridTemplateColumns=labelW+"px 1fr";
     const lab=el("div","g-label"+(isSummary?" sum":"")); lab.style.paddingLeft=(10+((t.level||1)-1)*16)+"px";
     lab.innerHTML=`<span style="overflow:hidden;text-overflow:ellipsis">${esc(wbsNumber(allTasks,idx))} ${esc(t.title||"(無題)")}</span>`;
-    if(t.assignee){ const w=el("span","who"); w.textContent=t.assignee; lab.appendChild(w); } row.appendChild(lab);
+    if(t.assignee){ const w=el("span","who"); const _al=assigneeLabel(t.assignee,cur().tasks); w.textContent=_al; w.title=_al; lab.appendChild(w); } row.appendChild(lab);
     const tl=el("div","g-timeline"); const cells=el("div","g-cells"); cells.style.gridTemplateColumns=`repeat(${totalDays},${dayPx}px)`; cells.style.height="36px";
     for(let i=0;i<totalDays;i++){ const dt=addDays(min,i); const c=el("div","g-cell"); const wd=dt.getDay(); if(wd===0||wd===6)c.classList.add("weekend"); if(dt.getDate()===1)c.classList.add("month"); cells.appendChild(c); }
     tl.appendChild(cells);
@@ -827,7 +885,7 @@ function runBriefing(){
       diffs.map(d=>`<li><b>${esc(d.label)}</b>：<br><span style="color:#b42318">${esc(d.from)||"（空）"}</span><br>→ <span style="color:#16a34a">${esc(d.to)||"（空）"}</span></li>`).join("")+"</ul>"});
   }
   const tt=todaysTasks();
-  steps.push({title:"🗓 今日やるべきタスク", html: tt.length? "<ul>"+tt.map(t=>`<li>${esc(t.title)} <span style="color:#6b7686">（〜${esc(t.end)}${t.assignee?"・"+esc(t.assignee):""}）</span></li>`).join("")+"</ul>" : "<p>本日が対象期間のタスクはありません。</p>"});
+  steps.push({title:"🗓 今日やるべきタスク", html: tt.length? "<ul>"+tt.map(t=>`<li>${esc(t.title)} <span style="color:#6b7686">（〜${esc(t.end)}${t.assignee?"・"+esc(assigneeLabel(t.assignee,cur().tasks)):""}）</span></li>`).join("")+"</ul>" : "<p>本日が対象期間のタスクはありません。</p>"});
   const at=attentionTasks();
   steps.push({title:"🔔 タスクのお知らせ", html:
     `<p><b>遅延（期限超過・未完了）：${at.late.length}件</b></p>`+(at.late.length?"<ul>"+at.late.map(t=>`<li style="color:#b42318">${esc(t.title)}（〜${esc(t.end)}）</li>`).join("")+"</ul>":"")+
