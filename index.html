@@ -380,6 +380,20 @@ let channel = null;
 let currentUser = null;
 let pmOverride = false;
 const PM_EMAIL = "y.nie.sys@gmail.com";
+/* ログインメール → 担当者名（WBSのassignee表記に一致）。
+   今日のタスク／お知らせを「自分の担当分のみ」に絞るための対応表。
+   メンバー追加時はここに1行足す（キーは小文字メール）。 */
+const MEMBER_MAP = {
+  "y.nie.sys@gmail.com":"井渕",
+  "sys.miyazaki0806@gmail.com":"宮崎",
+  "m.kojima.sys@gmail.com":"小島",
+  "shuichi20010818ma@gmail.com":"吉川",
+  "redien0920@gmail.com":"高畑"
+};
+/* 現在ログイン中の担当者名（未登録メールは ""）。 */
+function myName(){ return currentUser ? (MEMBER_MAP[(currentUser.email||"").toLowerCase()]||"") : ""; }
+/* 自分の担当か（「全員」タスクは全員に表示。対応表に無いメールは絞り込まず全件表示＝フォールバック）。 */
+function mineTask(t){ const n=myName(); if(!n) return true; const a=(t.assignee||"").trim(); return a===n || a==="全員"; }
 let backupHandle = null;
 let verBumped = false;   // 1編集セッションにつき版を1回だけ自動更新
 let wbsFilterAssignee = "";  // 表示専用：担当者フィルタ（""=全員）。DB/sort_orderには影響しない
@@ -871,10 +885,10 @@ function sowDiff(){
   SOW_FIELDS.forEach(f=>{ if((prev[f]||"")!==(cu[f]||"")) diffs.push({label:SOW_LABELS[f]||f,from:prev[f]||"",to:cu[f]||""}); });
   return diffs;
 }
-function todaysTasks(){ const t0=todayMid(); return cur().tasks.filter(t=>{ const s=parseDate(t.start),e=parseDate(t.end); return s&&e&&s<=t0&&t0<=e&&(t.progress||0)<100&&(t.level||1)>=2; }); }
+function todaysTasks(){ const t0=todayMid(); return cur().tasks.filter(t=>{ const s=parseDate(t.start),e=parseDate(t.end); return s&&e&&s<=t0&&t0<=e&&(t.progress||0)<100&&(t.level||1)>=2&&mineTask(t); }); }
 function attentionTasks(){ const t0=todayMid(),in7=addDays(t0,7);
-  const late=cur().tasks.filter(t=>{const e=parseDate(t.end);return e&&e<t0&&(t.progress||0)<100&&(t.level||1)>=2;});
-  const soon=cur().tasks.filter(t=>{const s=parseDate(t.start);return s&&s>t0&&s<=in7&&(t.level||1)>=2;});
+  const late=cur().tasks.filter(t=>{const e=parseDate(t.end);return e&&e<t0&&(t.progress||0)<100&&(t.level||1)>=2&&mineTask(t);});
+  const soon=cur().tasks.filter(t=>{const s=parseDate(t.start);return s&&s>t0&&s<=in7&&(t.level||1)>=2&&mineTask(t);});
   return {late,soon}; }
 function runBriefing(){
   if(!store.current) return;
@@ -884,10 +898,11 @@ function runBriefing(){
       "<p>前回の確認以降にSOWが更新されました。変更点を確認してください。</p><ul>"+
       diffs.map(d=>`<li><b>${esc(d.label)}</b>：<br><span style="color:#b42318">${esc(d.from)||"（空）"}</span><br>→ <span style="color:#16a34a">${esc(d.to)||"（空）"}</span></li>`).join("")+"</ul>"});
   }
+  const _mn=myName();
   const tt=todaysTasks();
-  steps.push({title:"🗓 今日やるべきタスク", html: tt.length? "<ul>"+tt.map(t=>`<li>${esc(t.title)} <span style="color:#6b7686">（〜${esc(t.end)}${t.assignee?"・"+esc(assigneeLabel(t.assignee,cur().tasks)):""}）</span></li>`).join("")+"</ul>" : "<p>本日が対象期間のタスクはありません。</p>"});
+  steps.push({title:"🗓 あなたの今日のタスク"+(_mn?"（"+esc(_mn)+"）":""), html: tt.length? "<ul>"+tt.map(t=>`<li>${esc(t.title)} <span style="color:#6b7686">（〜${esc(t.end)}${t.assignee?"・"+esc(assigneeLabel(t.assignee,cur().tasks)):""}）</span></li>`).join("")+"</ul>" : "<p>本日が対象期間の、あなたの担当タスクはありません。</p>"+(_mn?"":"<p style=\"color:#b42318;font-size:12px\">※あなたのログインは担当者と紐づいていません（全件表示中）。管理者に連絡してください。</p>")});
   const at=attentionTasks();
-  steps.push({title:"🔔 タスクのお知らせ", html:
+  steps.push({title:"🔔 タスクのお知らせ"+(_mn?"（あなたの担当分）":""), html:
     `<p><b>遅延（期限超過・未完了）：${at.late.length}件</b></p>`+(at.late.length?"<ul>"+at.late.map(t=>`<li style="color:#b42318">${esc(t.title)}（〜${esc(t.end)}）</li>`).join("")+"</ul>":"")+
     `<p style="margin-top:10px"><b>まもなく開始（7日以内）：${at.soon.length}件</b></p>`+(at.soon.length?"<ul>"+at.soon.map(t=>`<li>${esc(t.title)}（${esc(t.start)}〜）</li>`).join("")+"</ul>":"")});
   let i=0; const ov=$("#briefing");
